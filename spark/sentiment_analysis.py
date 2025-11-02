@@ -48,6 +48,18 @@ class TweetSentimentAnalyzer:
 
         logger.info(f"Spark session initialized: {self.spark.version}")
 
+        # Pre-download model to avoid repeated downloads
+        logger.info(f"Loading sentiment analysis model: {self.model_name}")
+        try:
+            from transformers import AutoModelForSequenceClassification, AutoTokenizer
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+            self.model = AutoModelForSequenceClassification.from_pretrained(
+                self.model_name)
+            logger.info("Model and tokenizer loaded successfully")
+        except Exception as e:
+            logger.error(f"Error loading model: {str(e)}")
+            raise
+
         # Initialize sentiment analysis pipeline
         logger.info(f"Loading sentiment analysis model: {self.model_name}")
         self.sentiment_pipeline = pipeline(
