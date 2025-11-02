@@ -1,373 +1,191 @@
-# 📂 Estructura Completa del Proyecto
+# Project File Structure
 
 ```
 ukraine-tweets-sentiment-analysis/
 │
-├── 📄 README.md                          ⭐ Documentación principal del proyecto
-├── 📄 PROJECT_SUMMARY.md                 📊 Resumen ejecutivo completo
-├── 📄 ARCHITECTURE.md                    🏗️  Diagramas de arquitectura detallados
-├── 📄 TROUBLESHOOTING.md                 🔧 Guía de solución de problemas
-├── 📄 CONTRIBUTING.md                    🤝 Guía para contribuidores
-├── 📄 LICENSE                            ⚖️  Licencia MIT
+├── README.md                           # Main documentation
+├── ARCHITECTURE.md                     # System architecture details
+├── TROUBLESHOOTING.md                  # Common issues and solutions
+├── docker-compose.yml                  # Main Docker orchestration file
+├── .env.example                        # Environment variables template
+├── .gitignore                          # Git ignore patterns
+├── Makefile                           # Build and management commands
+├── setup.sh                           # Setup script for Linux/Mac
+├── setup.bat                          # Setup script for Windows
 │
-├── 🐳 docker-compose.yml                 🎯 Definición de TODOS los servicios
-├── 🔐 .env                               🔑 Variables de entorno (NO subir a Git)
-├── 📋 .env.example                       📝 Template de configuración
-├── 🚫 .gitignore                         🛡️  Archivos a ignorar en Git
+├── airflow/                           # Apache Airflow configuration
+│   ├── Dockerfile                     # Airflow custom image
+│   ├── requirements.txt               # Python dependencies
+│   ├── dags/                          # Airflow DAGs
+│   │   └── twitter_sentiment_dag.py   # Main pipeline DAG
+│   ├── logs/                          # Airflow logs (generated)
+│   │   └── .gitkeep
+│   └── plugins/                       # Airflow plugins
+│       └── .gitkeep
 │
-├── 🔨 Makefile                           🐧 Comandos para Linux/Mac
-├── 💻 manage.ps1                         🪟 Script PowerShell para Windows
+├── spark/                             # Apache Spark configuration
+│   ├── Dockerfile                     # Spark custom image
+│   ├── requirements.txt               # Python dependencies
+│   └── sentiment_analysis.py          # Main Spark processing script
 │
-├── 📁 airflow/                           ✈️  Apache Airflow - Orquestación
-│   ├── 🐳 Dockerfile                     📦 Imagen personalizada con OpenMetadata
-│   └── 📁 dags/
-│       └── 🐍 ukraine_sentiment_pipeline_dag.py  🎯 DAG principal del pipeline
+├── superset/                          # Apache Superset configuration
+│   ├── Dockerfile                     # Superset custom image
+│   ├── init_superset.sh              # Initialization script
+│   ├── create_dashboard.py           # Dashboard automation script
+│   └── dashboards/                    # Dashboard exports
+│       └── .gitkeep
 │
-├── 📁 spark/                             ⚡ Apache Spark - Procesamiento
-│   ├── 📁 app/
-│   │   └── 🐍 sentiment_analysis_job.py  🤖 Script de análisis de sentimiento
-│   └── 📁 data/
-│       ├── 📄 README.md                   📚 Guía del dataset
-│       └── 📊 ukraine_tweets.csv          ⚠️  (Debes colocar tu dataset aquí)
+├── openmetadata/                      # OpenMetadata configuration
+│   ├── config.py                      # Connector configurations
+│   └── init_openmetadata.sh          # Initialization script
 │
-├── 📁 druid/                             🗄️  Apache Druid - Almacenamiento OLAP
-│   └── (configuraciones de Druid)
+├── scripts/                           # Utility scripts
+│   └── init-databases.sh             # PostgreSQL initialization
 │
-└── 📁 openmetadata/                      🏛️  OpenMetadata - Gobernanza
-    └── 📁 ingestion_configs/
-        ├── 📄 druid_config.yml            🔗 Configuración de ingesta Druid
-        └── 📄 superset_config.yml         📊 Configuración de ingesta Superset
+└── data/                              # Data directory (mounted)
+    ├── raw/                           # Raw input data
+    │   ├── .gitkeep
+    │   └── ukraine_tweets.csv         # [Download from Kaggle]
+    └── processed/                     # Processed output data
+        └── .gitkeep
+
+Docker Volumes (created automatically):
+├── postgres-data/                     # PostgreSQL data
+├── airflow-data/                      # Airflow data
+├── spark-master-data/                 # Spark master data
+├── spark-worker-data/                 # Spark worker data
+├── druid-coordinator-data/            # Druid coordinator data
+├── druid-broker-data/                 # Druid broker data
+├── druid-historical-data/             # Druid historical data
+├── druid-router-data/                 # Druid router data
+├── zookeeper-data/                    # ZooKeeper data
+├── zookeeper-datalog/                 # ZooKeeper logs
+├── superset-data/                     # Superset data
+├── openmetadata-data/                 # OpenMetadata data
+└── elasticsearch-data/                # Elasticsearch data
 ```
 
----
+## File Descriptions
 
-## 📋 Checklist de Archivos Creados
+### Root Files
 
-### ✅ Configuración Principal (5 archivos)
+-   **README.md**: Complete setup guide, usage instructions, and project overview
+-   **ARCHITECTURE.md**: Detailed system architecture and component descriptions
+-   **TROUBLESHOOTING.md**: Common issues and debugging solutions
+-   **docker-compose.yml**: Docker Compose configuration for all services
+-   **.env.example**: Template for environment variables
+-   **.gitignore**: Files and directories to exclude from Git
+-   **Makefile**: Convenient commands for managing the project
+-   **setup.sh/bat**: Automated setup scripts
 
--   [x] `docker-compose.yml` - Orquestación de 12 servicios
--   [x] `.env` - Variables de entorno configuradas
--   [x] `.env.example` - Template para nuevos usuarios
--   [x] `.gitignore` - Protección de datos sensibles
--   [x] `LICENSE` - Licencia MIT
+### Airflow Directory
 
-### ✅ Scripts de Gestión (2 archivos)
+-   **Dockerfile**: Custom Airflow image with Spark support
+-   **requirements.txt**: Python packages for Airflow
+-   **twitter_sentiment_dag.py**: Main DAG orchestrating the pipeline
 
--   [x] `Makefile` - Comandos para Linux/Mac
--   [x] `manage.ps1` - Script PowerShell para Windows
+### Spark Directory
 
-### ✅ Documentación (5 archivos)
+-   **Dockerfile**: Custom Spark image with ML libraries
+-   **requirements.txt**: Python packages including Transformers
+-   **sentiment_analysis.py**: Data processing and sentiment analysis logic
 
--   [x] `README.md` - Documentación principal (completa)
--   [x] `ARCHITECTURE.md` - Diagramas y arquitectura
--   [x] `TROUBLESHOOTING.md` - Guía de debugging
--   [x] `CONTRIBUTING.md` - Guía para contribuidores
--   [x] `PROJECT_SUMMARY.md` - Resumen ejecutivo
+### Superset Directory
 
-### ✅ Apache Airflow (2 archivos)
+-   **Dockerfile**: Custom Superset image with Druid support
+-   **init_superset.sh**: Bash script for initial setup
+-   **create_dashboard.py**: Python script to create dashboards automatically
 
--   [x] `airflow/Dockerfile` - Imagen personalizada
--   [x] `airflow/dags/ukraine_sentiment_pipeline_dag.py` - DAG completo
+### OpenMetadata Directory
 
-### ✅ Apache Spark (2 archivos)
+-   **config.py**: Configuration for various data source connectors
+-   **init_openmetadata.sh**: Setup script for metadata tracking
 
--   [x] `spark/app/sentiment_analysis_job.py` - Script de análisis
--   [x] `spark/data/README.md` - Guía del dataset
+### Scripts Directory
 
-### ✅ OpenMetadata (2 archivos)
+-   **init-databases.sh**: Creates additional PostgreSQL databases
 
--   [x] `openmetadata/ingestion_configs/druid_config.yml`
--   [x] `openmetadata/ingestion_configs/superset_config.yml`
+### Data Directory
 
----
+-   **raw/**: Place downloaded CSV files here
+-   **processed/**: Spark outputs results here
 
-## 🎯 Propósito de Cada Archivo
+## Services and Ports
 
-### 📖 Documentación
+| Service           | Port | Purpose                 |
+| ----------------- | ---- | ----------------------- |
+| PostgreSQL        | 5432 | Metadata storage        |
+| Airflow Webserver | 8080 | Workflow UI             |
+| Spark Master UI   | 8081 | Spark monitoring        |
+| Druid Coordinator | 8082 | Druid management        |
+| Druid Broker      | 8083 | Druid queries           |
+| Druid Historical  | 8084 | Historical data         |
+| Superset          | 8088 | Visualization           |
+| Druid Router      | 8888 | Druid API gateway       |
+| Elasticsearch     | 9200 | Search for OpenMetadata |
+| OpenMetadata      | 8585 | Governance UI           |
+| ZooKeeper         | 2181 | Coordination            |
 
-| Archivo              | Propósito                          | Para Quién             |
-| -------------------- | ---------------------------------- | ---------------------- |
-| `README.md`          | Guía completa de instalación y uso | Todos los usuarios     |
-| `ARCHITECTURE.md`    | Diagramas técnicos del sistema     | Arquitectos, DevOps    |
-| `TROUBLESHOOTING.md` | Solución de problemas comunes      | Usuarios con errores   |
-| `CONTRIBUTING.md`    | Cómo contribuir al proyecto        | Desarrolladores        |
-| `PROJECT_SUMMARY.md` | Resumen ejecutivo del proyecto     | Managers, Stakeholders |
-| `LICENSE`            | Términos de uso del código         | Legal, Usuarios        |
+## Key Components
 
-### ⚙️ Configuración
+### 1. Orchestration (Airflow)
 
-| Archivo              | Propósito                      | ⚠️ Importante     |
-| -------------------- | ------------------------------ | ----------------- |
-| `docker-compose.yml` | Define 12 servicios integrados | Core del proyecto |
-| `.env`               | Credenciales y configuración   | NO subir a Git    |
-| `.env.example`       | Template de configuración      | Sí subir a Git    |
-| `.gitignore`         | Protege archivos sensibles     | Evita leaks       |
+-   Schedules and monitors the pipeline
+-   Manages task dependencies
+-   Provides execution logs
 
-### 🔨 Automatización
+### 2. Processing (Spark)
 
-| Archivo      | Propósito              | SO        |
-| ------------ | ---------------------- | --------- |
-| `Makefile`   | Comandos simplificados | Linux/Mac |
-| `manage.ps1` | Script de gestión      | Windows   |
+-   Loads and cleans tweet data
+-   Performs sentiment analysis using Hugging Face models
+-   Outputs processed results
 
-### 🐍 Código Python
+### 3. Storage (PostgreSQL + Druid)
 
-| Archivo                             | Líneas | Funcionalidad                    |
-| ----------------------------------- | ------ | -------------------------------- |
-| `sentiment_analysis_job.py`         | ~350   | Análisis de sentimiento completo |
-| `ukraine_sentiment_pipeline_dag.py` | ~250   | Orquestación del pipeline        |
+-   PostgreSQL: Stores pipeline metadata
+-   Druid: Fast OLAP analytics on processed data
 
-### 🐳 Docker
+### 4. Visualization (Superset)
 
-| Archivo              | Propósito                     |
-| -------------------- | ----------------------------- |
-| `airflow/Dockerfile` | Imagen Airflow + OpenMetadata |
+-   Creates interactive dashboards
+-   Connects to Druid for fast queries
+-   Pre-configured sentiment charts
 
-### 📊 Configuración de Ingesta
+### 5. Governance (OpenMetadata)
 
-| Archivo               | Conecta                 |
-| --------------------- | ----------------------- |
-| `druid_config.yml`    | OpenMetadata ↔ Druid    |
-| `superset_config.yml` | OpenMetadata ↔ Superset |
+-   Tracks data lineage
+-   Documents data assets
+-   Monitors data quality
 
----
+## Data Flow
 
-## 📊 Estadísticas del Proyecto
-
-### Código
-
-```
-Archivos Python:     2
-Archivos YAML:       2
-Archivos Markdown:   6
-Archivos Config:     4
-Scripts:             2
-───────────────────────
-Total:              16 archivos
-```
-
-### Documentación
-
-```
-README.md:            ~500 líneas
-ARCHITECTURE.md:      ~400 líneas
-TROUBLESHOOTING.md:   ~450 líneas
-CONTRIBUTING.md:      ~400 líneas
-PROJECT_SUMMARY.md:   ~350 líneas
-───────────────────────────────
-Total:               ~2100 líneas
-```
-
-### Configuración Docker
-
-```
-Servicios:           12
-Volúmenes:           10
-Networks:            1
-Health Checks:       6
-Variables .env:      40+
-```
-
----
-
-## 🚀 Pasos para Comenzar
-
-1. **Clonar el repositorio**
-
-    ```bash
-    git clone https://github.com/GabrielFallas/ukraine-tweets-sentiment-analysis.git
-    cd ukraine-tweets-sentiment-analysis
-    ```
-
-2. **Revisar estructura**
-
-    ```powershell
-    tree /F  # Windows
-    # o
-    ls -R    # Linux/Mac
-    ```
-
-3. **Configurar entorno**
-
-    ```powershell
-    copy .env.example .env
-    notepad .env  # Editar según necesites
-    ```
-
-4. **Colocar dataset**
-
-    ```powershell
-    # Descargar y colocar en:
-    .\spark\data\ukraine_tweets.csv
-    ```
-
-5. **Iniciar servicios**
-
-    ```powershell
-    .\manage.ps1 install
-    # o
-    docker-compose up -d
-    ```
-
-6. **Verificar**
-
-    ```powershell
-    .\manage.ps1 health
-    ```
-
-7. **Acceder a UIs**
-    - Airflow: http://localhost:8080
-    - Spark: http://localhost:8081
-    - Superset: http://localhost:8088
-    - Druid: http://localhost:8888
-    - OpenMetadata: http://localhost:8585
-
----
-
-## 📦 Dependencias del Proyecto
-
-### Docker Images Utilizadas
-
-```yaml
-apache/airflow:2.7.3-python3.10
-bitnami/spark:3.5.0
-postgres:14
-apache/druid:27.0.0
-apache/superset:3.0.1
-openmetadata/server:1.2.0
-openmetadata/ingestion:1.2.0
-docker.elastic.co/elasticsearch/elasticsearch:8.10.2
-```
-
-### Python Packages (en Airflow)
-
-```
-openmetadata-ingestion[airflow,postgres,druid]==1.2.0
-apache-airflow-providers-apache-spark==4.3.0
-apache-airflow-providers-postgres==5.7.1
-pyspark==3.5.0
-pandas==2.1.3
-transformers==4.35.2
-torch==2.1.1
-```
-
----
-
-## 🎓 Qué Aprenderás
-
-Al trabajar con este proyecto:
-
-### Tecnologías Big Data
-
--   ✅ Apache Spark para procesamiento distribuido
--   ✅ Apache Druid para OLAP en tiempo real
--   ✅ Apache Airflow para orquestación
--   ✅ Apache Superset para visualización
-
-### Machine Learning
-
--   ✅ Modelos Transformer (XLM-RoBERTa)
--   ✅ Análisis de sentimiento multilingüe
--   ✅ Hugging Face Transformers
--   ✅ Procesamiento de texto
-
-### DevOps
-
--   ✅ Docker y Docker Compose
--   ✅ Multi-container applications
--   ✅ Networking y volúmenes
--   ✅ Health checks y depends_on
-
-### Data Governance
-
--   ✅ OpenMetadata para catalogación
--   ✅ Data lineage
--   ✅ Metadata management
--   ✅ Data quality
-
----
-
-## 💡 Próximos Pasos
-
-Después de completar la instalación:
-
-1. **Ejecutar el Pipeline**
-
-    - Activar DAG en Airflow
-    - Monitorear ejecución
-    - Revisar logs
-
-2. **Crear Visualizaciones**
-
-    - Conectar Superset a Druid
-    - Crear datasets
-    - Diseñar dashboards
-
-3. **Explorar Gobernanza**
-
-    - Acceder a OpenMetadata
-    - Revisar catálogo de datos
-    - Visualizar linaje
-
-4. **Experimentar**
-    - Probar con tu propio dataset
-    - Ajustar el modelo de ML
-    - Agregar nuevas métricas
-
----
-
-## 🏆 Características Destacadas
-
-### ✨ Arquitectura Completa
-
--   Pipeline end-to-end funcional
--   12 servicios integrados
--   Gobernanza de datos incluida
-
-### 📚 Documentación Exhaustiva
-
--   +2000 líneas de documentación
--   Guías paso a paso
--   Troubleshooting detallado
-
-### 🔧 Fácil de Usar
-
--   Scripts automatizados
--   Un comando para instalar
--   Configuración clara
-
-### 🚀 Producción Ready
-
--   Health checks configurados
--   Error handling robusto
--   Logs centralizados
--   Backup procedures
-
----
-
-## 📞 Ayuda y Soporte
-
-### Recursos Internos
-
-1. 📖 [README.md](README.md) - Empezar aquí
-2. 🏗️ [ARCHITECTURE.md](ARCHITECTURE.md) - Entender la arquitectura
-3. 🔧 [TROUBLESHOOTING.md](TROUBLESHOOTING.md) - Resolver problemas
-4. 🤝 [CONTRIBUTING.md](CONTRIBUTING.md) - Contribuir al proyecto
-
-### Recursos Externos
-
--   GitHub Issues: Reportar bugs
--   Discussions: Hacer preguntas
--   Email: gabriel@example.com
-
----
-
-**🎉 ¡Proyecto Completo y Listo para Usar!**
-
-Todos los componentes están implementados, documentados y listos para ejecutarse.
-
----
-
-_Última actualización: Octubre 2025_  
-_Versión: 1.0.0_  
-_Autor: Gabriel Fallas_
+1. **Input**: CSV file in `data/raw/`
+2. **Trigger**: Airflow DAG runs (scheduled or manual)
+3. **Process**: Spark analyzes sentiment
+4. **Output**: Results saved to `data/processed/`
+5. **Ingest**: Druid loads processed data
+6. **Visualize**: Superset displays dashboards
+7. **Track**: OpenMetadata records lineage
+
+## Getting Started
+
+1. Run setup script: `./setup.sh` or `setup.bat`
+2. Download dataset to `data/raw/ukraine_tweets.csv`
+3. Edit `.env` with required keys
+4. Build images: `docker-compose build`
+5. Start services: `docker-compose up -d`
+6. Access Airflow: http://localhost:8080
+7. Trigger the DAG
+8. View results in Superset: http://localhost:8088
+
+## Notes
+
+-   All services run in Docker containers
+-   Data is persisted in named volumes
+-   Configuration is externalized via environment variables
+-   Services communicate via Docker network
+-   Logs are available via `docker-compose logs`
+
+For detailed instructions, see README.md
+For troubleshooting, see TROUBLESHOOTING.md
+For architecture details, see ARCHITECTURE.md

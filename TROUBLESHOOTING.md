@@ -1,689 +1,518 @@
-# 🔧 Guía de Troubleshooting
+# Troubleshooting Guide
 
-## Índice de Problemas Comunes
+## Common Issues and Solutions
 
-1. [Servicios no inician](#servicios-no-inician)
-2. [Errores de conexión entre servicios](#errores-de-conexión-entre-servicios)
-3. [Problemas de memoria](#problemas-de-memoria)
-4. [Dataset no encontrado](#dataset-no-encontrado)
-5. [Errores en el DAG de Airflow](#errores-en-el-dag-de-airflow)
-6. [Spark job falla](#spark-job-falla)
-7. [OpenMetadata no se conecta](#openmetadata-no-se-conecta)
-8. [Superset no carga dashboards](#superset-no-carga-dashboards)
-9. [PostgreSQL no responde](#postgresql-no-responde)
-10. [Elasticsearch falla](#elasticsearch-falla)
+### 1. Services Won't Start
 
----
+#### Problem: Docker containers fail to start
 
-## Servicios no inician
-
-### Síntoma
-
-```
-ERROR: Container failed to start
+```bash
+Error: Cannot start service ...
 ```
 
-### Diagnóstico
+**Solutions:**
 
-```powershell
-# Ver logs del servicio
-docker-compose logs <nombre-servicio>
+1. Check Docker is running:
 
-# Ver estado de todos los servicios
-docker-compose ps
-```
+    ```bash
+    docker ps
+    ```
 
-### Soluciones
+2. Check available resources:
 
-#### 1. Puerto ya en uso
+    - Windows: Docker Desktop → Settings → Resources
+    - Increase memory to at least 8GB
+    - Increase CPUs to at least 4
 
-```powershell
-# Ver qué proceso está usando el puerto
-netstat -ano | findstr :8080
+3. Check port conflicts:
 
-# Matar el proceso (reemplaza PID)
-taskkill /PID <PID> /F
-```
+    ```bash
+    # Windows
+    netstat -ano | findstr :8080
 
-#### 2. Falta el archivo .env
+    # Linux/Mac
+    lsof -i :8080
+    ```
 
-```powershell
-# Copiar el ejemplo
-copy .env.example .env
+4. Clean up and restart:
+    ```bash
+    docker-compose down -v
+    docker system prune -a
+    docker-compose up -d
+    ```
 
-# Editar el archivo .env según necesites
-notepad .env
-```
+### 2. Airflow Issues
 
-#### 3. Imagen corrupta
+#### Problem: Airflow webserver returns 500 error
 
-```powershell
-# Reconstruir la imagen
-docker-compose build --no-cache <nombre-servicio>
+**Solution:**
 
-# Reiniciar
-docker-compose up -d <nombre-servicio>
-```
-
-#### 4. Volumen corrupto
-
-```powershell
-# Detener servicios
+```bash
+# Check Fernet key is set in .env
+# Recreate Airflow database
 docker-compose down
-
-# Eliminar volúmenes
-docker volume rm ukraine-tweets-sentiment-analysis_<nombre-volumen>
-
-# Reiniciar
+docker volume rm ukraine-tweets-sentiment-analysis_airflow-data
 docker-compose up -d
 ```
 
----
+#### Problem: DAG not appearing in Airflow UI
 
-## Errores de conexión entre servicios
+**Solution:**
 
-### Síntoma
+```bash
+# Check DAG syntax
+docker exec -it sentiment-airflow-webserver airflow dags list
 
-```
-Connection refused to <service>:port
-```
+# Check for errors
+docker exec -it sentiment-airflow-webserver airflow dags list-import-errors
 
-### Diagnóstico
-
-```powershell
-# Verificar que todos los servicios estén en la misma red
-docker network inspect ukraine-tweets-sentiment-analysis_ukraine_sentiment_network
-
-# Verificar conectividad desde un contenedor
-docker exec -it airflow-webserver ping spark-master
+# Restart scheduler
+docker-compose restart airflow-scheduler
 ```
 
-### Soluciones
+#### Problem: Task stuck in "running" state
 
-#### 1. Servicio no levantó completamente
+**Solution:**
 
-```powershell
-# Esperar a que el servicio esté healthy
-docker-compose ps
+```bash
+# Clear task state
+docker exec -it sentiment-airflow-webserver \
+  airflow tasks clear twitter_sentiment_pipeline -t <task_id>
 
-# Ver logs para identificar el problema
-docker-compose logs <servicio>
+# Or restart scheduler
+docker-compose restart airflow-scheduler
 ```
 
-#### 2. Usar nombres de servicios correctos
+### 3. Spark Issues
 
-En Docker Compose, usa los nombres de servicios definidos en `docker-compose.yml`:
+#### Problem: Spark submit fails with "Connection refused"
 
--   ✅ `spark-master` (correcto)
--   ❌ `localhost` (incorrecto desde contenedores)
+**Solution:**
 
-#### 3. Recrear la red
+```bash
+# Check Spark master is running
+curl http://localhost:8081
 
-```powershell
-docker-compose down
-docker network prune
-docker-compose up -d
+# Check Spark master URL in Airflow
+docker exec -it sentiment-airflow-webserver env | grep SPARK
+
+# Verify network connectivity
+docker exec -it sentiment-airflow-webserver ping spark-master
 ```
 
----
+#### Problem: Spark job fails with OutOfMemoryError
 
-## Problemas de memoria
+**Solution:**
 
-### Síntoma
+1. Increase Spark memory in `docker-compose.yml`:
 
-```
-Container killed due to out of memory
-java.lang.OutOfMemoryError
-```
+    ```yaml
+    spark-worker:
+        environment:
+            SPARK_WORKER_MEMORY: 8G
+    ```
 
-### Diagnóstico
+2. Modify Spark config in DAG:
 
-```powershell
-# Ver uso de recursos
-docker stats
+    ```python
+    conf={
+        'spark.driver.memory': '8g',
+        'spark.executor.memory': '8g',
+    }
+    ```
 
-# Ver configuración de Docker Desktop
-# Settings > Resources
-```
+3. Process data in smaller chunks:
+    ```python
+    # In sentiment_analysis.py
+    df.limit(100000)  # Process subset first
+    ```
 
-### Soluciones
+#### Problem: Hugging Face model download fails
 
-#### 1. Aumentar memoria de Docker
+**Solution:**
 
-1. Abrir Docker Desktop
-2. Settings > Resources > Memory
-3. Aumentar a mínimo 8 GB (recomendado 12-16 GB)
-4. Apply & Restart
+```bash
+# Pre-download model
+docker exec -it sentiment-spark-master bash
+python -c "from transformers import pipeline; pipeline('sentiment-analysis')"
 
-#### 2. Reducir recursos de Spark
-
-Editar `.env`:
-
-```env
-SPARK_WORKER_MEMORY=1g  # Reducir de 2g a 1g
-SPARK_WORKER_CORES=1    # Reducir de 2 a 1
-```
-
-#### 3. Procesar menos datos
-
-```python
-# En sentiment_analysis_job.py
-# Limitar el número de filas para pruebas
-df = df.limit(1000)  # Solo procesar 1000 tweets
+# Or use cached model
+# Mount model cache directory in docker-compose.yml
 ```
 
-#### 4. Ajustar particiones de Spark
+### 4. Druid Issues
 
-Editar `.env`:
+#### Problem: Druid services not communicating
 
-```env
-# Reducir particiones
-spark.sql.shuffle.partitions=5  # De 10 a 5
+**Solution:**
+
+```bash
+# Check ZooKeeper is running
+docker exec -it sentiment-druid-zookeeper zkServer.sh status
+
+# Restart Druid services in order
+docker-compose restart druid-zookeeper
+docker-compose restart druid-coordinator
+docker-compose restart druid-broker
+docker-compose restart druid-historical
+docker-compose restart druid-router
 ```
 
----
+#### Problem: Data ingestion fails
 
-## Dataset no encontrado
+**Solution:**
 
-### Síntoma
+1. Check ingestion spec:
 
-```
-FileNotFoundException: /opt/spark/data/ukraine_tweets.csv
-```
+    ```bash
+    # Verify spec file exists
+    docker exec -it sentiment-airflow-webserver \
+      cat /opt/airflow/data/druid_ingestion_spec.json
+    ```
 
-### Diagnóstico
+2. Check Druid coordinator logs:
 
-```powershell
-# Verificar que el archivo existe
-docker exec -it spark-master ls -lh /opt/spark/data/
-```
+    ```bash
+    docker-compose logs druid-coordinator
+    ```
 
-### Soluciones
+3. Verify data path:
 
-#### 1. Copiar el dataset
+    ```bash
+    # Check processed data exists
+    docker exec -it druid-coordinator \
+      ls -la /opt/druid/data/processed/sentiment_results/
+    ```
 
-```powershell
-# Desde PowerShell
-docker cp .\spark\data\ukraine_tweets.csv spark-master:/opt/spark/data/
+4. Manual ingestion test:
+    ```bash
+    curl -X POST http://localhost:8081/druid/indexer/v1/task \
+      -H 'Content-Type: application/json' \
+      -d @data/druid_ingestion_spec.json
+    ```
 
-# Verificar
-docker exec -it spark-master ls -lh /opt/spark/data/
-```
+#### Problem: Druid queries return no data
 
-#### 2. Verificar el volumen
+**Solution:**
 
-En `docker-compose.yml`, asegúrate de que el volumen esté montado:
+```bash
+# Check datasource exists
+curl http://localhost:8888/druid/v2/datasources
 
-```yaml
-volumes:
-    - ./spark/data:/opt/spark/data
-```
-
-#### 3. Descargar dataset de Kaggle
-
-```powershell
-# Instalar Kaggle CLI
-pip install kaggle
-
-# Configurar credenciales (descargar kaggle.json de kaggle.com)
-mkdir $env:USERPROFILE\.kaggle
-copy kaggle.json $env:USERPROFILE\.kaggle\
-
-# Descargar dataset (ejemplo)
-kaggle datasets download -d <dataset-name> -p .\spark\data\
+# Query manually
+curl -X POST 'http://localhost:8888/druid/v2/sql' \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"SELECT * FROM ukraine_tweets_sentiment LIMIT 10"}'
 ```
 
----
+### 5. Superset Issues
 
-## Errores en el DAG de Airflow
+#### Problem: Cannot connect to Druid
 
-### Síntoma
+**Solution:**
 
-```
-DAG import error
-Broken DAG
-```
+1. Check Druid connection string:
 
-### Diagnóstico
+    ```
+    druid://druid-broker:8082/druid/v2/sql/
+    ```
 
-```powershell
-# Ver logs de Airflow
-docker-compose logs airflow-scheduler
+2. Test from Superset container:
 
-# Verificar DAGs desde el CLI
-docker exec -it airflow-webserver airflow dags list
+    ```bash
+    docker exec -it sentiment-superset bash
+    curl http://druid-broker:8082/status
+    ```
 
-# Ver errores de un DAG específico
-docker exec -it airflow-webserver airflow dags show ukraine_sentiment_pipeline
-```
+3. Recreate database connection in Superset UI
 
-### Soluciones
+#### Problem: Charts not loading
 
-#### 1. Error de sintaxis Python
+**Solution:**
 
-```powershell
-# Validar el archivo Python localmente
-python -m py_compile .\airflow\dags\ukraine_sentiment_pipeline_dag.py
-```
-
-#### 2. Falta dependencia
-
-```powershell
-# Acceder al contenedor
-docker exec -it airflow-webserver bash
-
-# Instalar dependencia faltante
-pip install <paquete-faltante>
-
-# O reconstruir la imagen con la dependencia en Dockerfile
-```
-
-#### 3. DAG pausado
-
-1. Ir a Airflow UI: http://localhost:8080
-2. Buscar el DAG
-3. Activar el toggle switch (debe estar en azul/verde)
-
-#### 4. Conexión Spark no configurada
-
-```powershell
-# Crear conexión desde CLI
-docker exec -it airflow-webserver airflow connections add \
-  'spark_default' \
-  --conn-type 'spark' \
-  --conn-host 'spark://spark-master' \
-  --conn-port '7077'
-```
-
----
-
-## Spark job falla
-
-### Síntoma
-
-```
-Spark job failed with exception
-```
-
-### Diagnóstico
-
-```powershell
-# Ver logs de Spark Master
-docker-compose logs spark-master
-
-# Ver logs de Spark Worker
-docker-compose logs spark-worker
-
-# Ver la UI de Spark
-# http://localhost:8081
-```
-
-### Soluciones
-
-#### 1. Modelo de Hugging Face no descarga
-
-```python
-# En sentiment_analysis_job.py, agregar cache
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
-
-# Especificar directorio de cache
-model = AutoModelForSequenceClassification.from_pretrained(
-    "cardiffnlp/twitter-xlm-roberta-base-sentiment",
-    cache_dir="/opt/spark/models"
-)
-```
-
-#### 2. Error de memoria en UDF
-
-```python
-# Procesar en lotes más pequeños
-# Modificar la función analyze_batch para procesar de a 10 textos
-```
-
-#### 3. Datos corruptos
-
-```python
-# Agregar manejo de errores
-try:
-    df = spark.read.csv(path, header=True)
-except Exception as e:
-    print(f"Error leyendo CSV: {e}")
-    # Intentar con encoding diferente
-    df = spark.read.option("encoding", "ISO-8859-1").csv(path, header=True)
-```
-
-#### 4. Ejecutar en modo local para debug
-
-```powershell
-# Acceder a Spark
-docker exec -it spark-master bash
-
-# Ejecutar manualmente
-spark-submit \
-  --master local[*] \
-  --driver-memory 2g \
-  /opt/spark/app/sentiment_analysis_job.py
-```
-
----
-
-## OpenMetadata no se conecta
-
-### Síntoma
-
-```
-Failed to connect to OpenMetadata server
-```
-
-### Diagnóstico
-
-```powershell
-# Verificar estado de OpenMetadata
-docker-compose ps openmetadata-server
-
-# Ver logs
-docker-compose logs openmetadata-server
-
-# Verificar Elasticsearch (requerido)
-docker-compose logs elasticsearch
-```
-
-### Soluciones
-
-#### 1. Elasticsearch no está healthy
-
-```powershell
-# Verificar salud
-curl http://localhost:9200/_cluster/health
-
-# Si falla, reiniciar
-docker-compose restart elasticsearch
-
-# Esperar a que esté verde
-docker-compose logs -f elasticsearch
-```
-
-#### 2. PostgreSQL de OpenMetadata no está listo
-
-```powershell
-# Verificar conexión
-docker exec -it postgres_openmetadata_db psql -U openmetadata -d openmetadata_db
-
-# Si falla, recrear
-docker-compose down
-docker volume rm ukraine-tweets-sentiment-analysis_postgres_openmetadata_data
-docker-compose up -d postgres_openmetadata_db
-```
-
-#### 3. OpenMetadata no inicializó
-
-```powershell
-# Ver logs de inicialización
-docker-compose logs openmetadata-server | findstr "ERROR"
-
-# Recrear el servicio
-docker-compose up -d --force-recreate openmetadata-server
-```
-
-#### 4. Acceso desde navegador
-
--   URL correcta: http://localhost:8585 (sin /api)
--   Usuario: `admin`
--   Contraseña: `admin`
-
----
-
-## Superset no carga dashboards
-
-### Síntoma
-
-```
-Dashboard not found
-Database connection error
-```
-
-### Diagnóstico
-
-```powershell
-# Ver logs
+```bash
+# Check Superset logs
 docker-compose logs superset
 
-# Acceder al contenedor
-docker exec -it superset bash
+# Clear Superset cache
+docker exec -it sentiment-superset superset cache-clear
 
-# Verificar base de datos
-superset db upgrade
+# Restart Superset
+docker-compose restart superset
 ```
 
-### Soluciones
+#### Problem: Login fails
 
-#### 1. Base de datos no inicializada
+**Solution:**
 
-```powershell
-docker exec -it superset superset db upgrade
-docker exec -it superset superset init
-```
-
-#### 2. Usuario admin no existe
-
-```powershell
-docker exec -it superset superset fab create-admin \
+```bash
+# Reset admin password
+docker exec -it sentiment-superset superset fab create-admin \
   --username admin \
   --firstname Admin \
   --lastname User \
-  --email admin@example.com \
+  --email admin@superset.com \
   --password admin
 ```
 
-#### 3. Conexión a Druid no configurada
+### 6. OpenMetadata Issues
 
-1. Ir a: http://localhost:8088
-2. Settings > Database Connections > + Database
-3. Seleccionar: Apache Druid
-4. SQLAlchemy URI: `druid://druid:8888/druid/v2/sql`
-5. Test Connection > Save
+#### Problem: OpenMetadata UI not loading
 
----
-
-## PostgreSQL no responde
-
-### Síntoma
-
-```
-Connection refused to postgres:5432
-```
-
-### Diagnóstico
-
-```powershell
-# Ver logs
-docker-compose logs postgres_airflow_db
-docker-compose logs postgres_superset_db
-docker-compose logs postgres_openmetadata_db
-
-# Verificar estado
-docker-compose ps
-```
-
-### Soluciones
-
-#### 1. Contenedor no está healthy
-
-```powershell
-# Esperar a que pase el healthcheck
-docker-compose ps
-
-# Ver por qué falla el healthcheck
-docker exec -it postgres_airflow_db pg_isready -U airflow
-```
-
-#### 2. Puerto ya en uso
-
-```powershell
-# Cambiar puerto en docker-compose.yml
-# De:
-ports:
-  - "5432:5432"
-# A:
-ports:
-  - "5435:5432"
-```
-
-#### 3. Volumen corrupto
-
-```powershell
-# ADVERTENCIA: Esto borrará todos los datos
-docker-compose down
-docker volume rm ukraine-tweets-sentiment-analysis_postgres_airflow_data
-docker-compose up -d postgres_airflow_db
-```
-
----
-
-## Elasticsearch falla
-
-### Síntoma
-
-```
-Elasticsearch startup failed
-max virtual memory areas vm.max_map_count too low
-```
-
-### Diagnóstico
-
-```powershell
-docker-compose logs elasticsearch
-```
-
-### Soluciones
-
-#### 1. Aumentar vm.max_map_count (Linux/WSL2)
+**Solution:**
 
 ```bash
-# Desde WSL2
-wsl -d docker-desktop
-sysctl -w vm.max_map_count=262144
+# Check Elasticsearch is running
+curl http://localhost:9200/_cluster/health
 
-# Para que persista
-echo "vm.max_map_count=262144" >> /etc/sysctl.conf
+# Check OpenMetadata logs
+docker-compose logs openmetadata
+
+# Restart services
+docker-compose restart openmetadata-elasticsearch
+docker-compose restart openmetadata
 ```
 
-#### 2. Reducir memoria de ES
+#### Problem: Cannot add service connections
 
-En `docker-compose.yml`:
+**Solution:**
 
-```yaml
-elasticsearch:
-    environment:
-        - ES_JAVA_OPTS=-Xms256m -Xmx256m # Reducir de 512m
+1. Wait 2-3 minutes for full initialization
+2. Verify services are accessible from OpenMetadata:
+    ```bash
+    docker exec -it sentiment-openmetadata curl http://airflow-webserver:8080/health
+    ```
+
+### 7. PostgreSQL Issues
+
+#### Problem: Database connection refused
+
+**Solution:**
+
+```bash
+# Check PostgreSQL is running
+docker exec -it sentiment-postgres pg_isready -U airflow
+
+# Check databases exist
+docker exec -it sentiment-postgres psql -U airflow -c "\l"
+
+# Create missing databases
+docker exec -it sentiment-postgres psql -U airflow -c "CREATE DATABASE druid;"
 ```
 
-#### 3. Deshabilitar seguridad si da problemas
+#### Problem: Too many connections
 
-```yaml
-elasticsearch:
-    environment:
-        - xpack.security.enabled=false
+**Solution:**
+
+```bash
+# Check active connections
+docker exec -it sentiment-postgres psql -U airflow -c \
+  "SELECT count(*) FROM pg_stat_activity;"
+
+# Restart services that connect to PostgreSQL
+docker-compose restart airflow-webserver airflow-scheduler
 ```
 
----
+### 8. Data Issues
 
-## Comandos Útiles para Debugging
+#### Problem: Input CSV not found
 
-### Ver logs en tiempo real
+**Solution:**
 
-```powershell
-docker-compose logs -f <servicio>
+```bash
+# Verify file exists
+ls -la data/raw/ukraine_tweets.csv
+
+# Check file is accessible in container
+docker exec -it sentiment-airflow-webserver \
+  ls -la /opt/airflow/data/raw/
+
+# Verify mount in docker-compose.yml
 ```
 
-### Acceder a un contenedor
+#### Problem: Sentiment analysis produces all NEUTRAL
 
-```powershell
-docker exec -it <contenedor> bash
+**Solution:**
+
+1. Check model is loaded:
+
+    ```python
+    # In sentiment_analysis.py
+    logger.info(f"Model: {self.model_name}")
+    ```
+
+2. Verify text cleaning isn't too aggressive
+3. Check for non-English tweets (model is English-only)
+
+#### Problem: Processing is very slow
+
+**Solution:**
+
+1. Reduce dataset size for testing:
+
+    ```python
+    df = df.limit(10000)  # Test with subset
+    ```
+
+2. Increase batch size:
+
+    ```python
+    batch_size = 500  # from 100
+    ```
+
+3. Add more Spark workers
+
+### 9. Network Issues
+
+#### Problem: Services can't communicate
+
+**Solution:**
+
+```bash
+# Check network exists
+docker network ls | grep sentiment
+
+# Inspect network
+docker network inspect ukraine-tweets-sentiment-analysis_sentiment-network
+
+# Reconnect service to network
+docker network connect sentiment-network sentiment-airflow-webserver
 ```
 
-### Ver uso de recursos
+### 10. Volume Issues
 
-```powershell
+#### Problem: Changes not reflected in container
+
+**Solution:**
+
+```bash
+# Restart container
+docker-compose restart <service-name>
+
+# Force recreate
+docker-compose up -d --force-recreate <service-name>
+
+# Check mount
+docker inspect sentiment-airflow-webserver | grep Mounts -A 20
+```
+
+## Debugging Commands
+
+### Check Service Health
+
+```bash
+# All services status
+docker-compose ps
+
+# Resource usage
 docker stats
+
+# Service logs
+docker-compose logs -f <service-name>
+
+# Last 100 lines of logs
+docker-compose logs --tail=100 <service-name>
 ```
 
-### Limpiar todo y empezar de cero
+### Access Containers
 
-```powershell
-# ADVERTENCIA: Elimina todos los datos
+```bash
+# Airflow
+docker exec -it sentiment-airflow-webserver bash
+
+# Spark
+docker exec -it sentiment-spark-master bash
+
+# PostgreSQL
+docker exec -it sentiment-postgres psql -U airflow -d airflow
+
+# Druid
+docker exec -it druid-broker bash
+```
+
+### Check Connectivity
+
+```bash
+# From Airflow to Spark
+docker exec -it sentiment-airflow-webserver curl http://spark-master:8080
+
+# From Airflow to Druid
+docker exec -it sentiment-airflow-webserver curl http://druid-router:8888/status
+
+# From Superset to Druid
+docker exec -it sentiment-superset curl http://druid-broker:8082/status
+```
+
+### Reset Everything
+
+```bash
+# Nuclear option - complete reset
 docker-compose down -v
-docker system prune -a
-docker volume prune
+docker system prune -a -f
+rm -rf airflow/logs/*
+rm -rf data/processed/*
+
+# Restart from scratch
 docker-compose build --no-cache
 docker-compose up -d
 ```
 
-### Verificar conectividad de red
+## Performance Optimization
 
-```powershell
-# Desde un contenedor a otro
-docker exec -it airflow-webserver curl http://spark-master:8081
-docker exec -it airflow-webserver ping openmetadata-server
-```
+### Speed up Spark Processing
 
-### Inspeccionar configuración
+1. Increase parallelism:
 
-```powershell
-# Ver variables de entorno de un contenedor
-docker exec -it <contenedor> env
+    ```python
+    df.repartition(20)
+    ```
 
-# Ver configuración de Docker Compose
-docker-compose config
-```
+2. Cache frequently used DataFrames:
 
----
+    ```python
+    df_cleaned.cache()
+    ```
 
-## Obtener Ayuda Adicional
+3. Use more efficient serialization:
+    ```python
+    .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+    ```
 
-### Logs de Airflow
+### Optimize Druid Queries
 
-```powershell
-# Ver logs de una tarea específica
-docker exec -it airflow-webserver airflow tasks logs ukraine_sentiment_pipeline spark_sentiment_analysis <date>
-```
+1. Tune segment granularity
+2. Add indexes on frequently queried columns
+3. Use aggregations at ingestion time
 
-### Comunidades y Recursos
+### Speed up Airflow
 
--   Apache Airflow: https://airflow.apache.org/community/
--   Apache Spark: https://spark.apache.org/community.html
--   OpenMetadata: https://slack.open-metadata.org/
--   Stack Overflow: Etiquetas `airflow`, `spark`, `druid`
+1. Increase parallelism:
 
-### Reportar un Bug
+    ```python
+    default_args = {
+        'max_active_runs': 3,
+        'max_active_tasks': 5
+    }
+    ```
 
-Si encuentras un problema con el proyecto:
+2. Use connection pooling
+3. Optimize task scheduling
 
-1. Crea un issue en GitHub
-2. Incluye logs relevantes
-3. Describe los pasos para reproducir
-4. Menciona tu sistema operativo y versión de Docker
+## Getting Help
 
----
+1. Check logs first: `docker-compose logs <service>`
+2. Search GitHub issues
+3. Consult official documentation
+4. Open a new issue with:
+    - Error message
+    - Relevant logs
+    - Steps to reproduce
+    - Environment details (OS, Docker version)
 
-## Checklist de Verificación
+## Useful Links
 
-Antes de reportar un problema, verifica:
-
--   [ ] Docker Desktop está corriendo
--   [ ] Tienes suficiente memoria (8GB+)
--   [ ] El archivo `.env` existe y está configurado
--   [ ] El dataset está en `spark/data/ukraine_tweets.csv`
--   [ ] Todos los servicios están "healthy" (`docker-compose ps`)
--   [ ] No hay conflictos de puertos
--   [ ] Los volúmenes no están corruptos
--   [ ] Has esperado suficiente tiempo para la inicialización (~5-10 min)
-
----
-
-**¿Aún tienes problemas?** Abre un issue en GitHub con:
-
--   Descripción del problema
--   Logs completos
--   Comando ejecutado
--   Sistema operativo y versión de Docker
+-   [Docker Documentation](https://docs.docker.com/)
+-   [Airflow Documentation](https://airflow.apache.org/docs/)
+-   [Spark Documentation](https://spark.apache.org/docs/latest/)
+-   [Druid Documentation](https://druid.apache.org/docs/latest/)
+-   [Superset Documentation](https://superset.apache.org/docs/intro)

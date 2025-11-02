@@ -1,9 +1,12 @@
-# Ignorar archivos de Python
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
+env/
+venv/
+ENV/
 build/
 develop-eggs/
 dist/
@@ -20,76 +23,52 @@ wheels/
 .installed.cfg
 *.egg
 
-# Ignorar archivos de Jupyter Notebook
+# Jupyter Notebook
 .ipynb_checkpoints
 
-# Ignorar archivos de entorno virtual
-venv/
-ENV/
-env/
+# Environment variables
+.env
 
-# Ignorar archivos de IDE
+# Docker volumes
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# Airflow
+airflow/logs/*
+!airflow/logs/.gitkeep
+airflow/__pycache__/
+airflow/*.pid
+airflow/airflow.db
+airflow/airflow.cfg
+airflow/webserver_config.py
+
+# Spark
+spark/metastore_db/
+spark/derby.log
+spark/spark-warehouse/
+
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# Ignorar logs de Airflow
-airflow/logs/
-airflow/*.pid
-airflow/*.log
-airflow/*.db
-airflow/airflow.cfg
-airflow/unittests.cfg
-airflow/webserver_config.py
-
-# Ignorar datos y outputs
-spark/data/*.csv
-spark/data/*.parquet
-spark/data/*.json
-spark/output/
-
-# Ignorar credenciales
-*.pem
-*.key
-kaggle.json
-.kaggle/
-
-# Ignorar archivos de Docker
-*.log
-
-# Ignorar archivos de sistema
+# OS
 .DS_Store
 Thumbs.db
-desktop.ini
 
-# Ignorar archivos temporales
-*.tmp
-*.temp
-*.bak
-*.backup
+# Logs
+*.log
 
-# Ignorar modelos descargados
-models/
-*.bin
-*.h5
-*.pkl
-*.joblib
+# Database
+*.db
+*.sqlite
 
-# Ignorar archivos de Elasticsearch
-elasticsearch/data/
-
-# Ignorar volúmenes de Docker
-postgres_data/
-druid_data/
-superset_home/
-
-# NO ignorar archivos de configuración importantes
-!.env.example
-!docker-compose.yml
-!README.md
-
-spark/data/ukraine-war-tweets
-
-.env
+# Large files
+*.csv
+*.parquet
+*.json
+!**/druid_ingestion_spec.json

@@ -1,369 +1,292 @@
-# 🚀 Guía de Inicio Rápido
+# Quick Start Guide
 
-## ⚡ Iniciar el Proyecto en 5 Minutos
+Get the sentiment analysis pipeline running in under 10 minutes!
 
-### ✅ Prerrequisitos Verificados
+## Prerequisites Checklist
 
-Antes de comenzar, asegúrate de tener:
+-   [ ] Docker Desktop installed and running
+-   [ ] At least 16GB RAM available
+-   [ ] 20GB free disk space
+-   [ ] Internet connection (for downloading images and models)
 
--   [x] **Docker Desktop** instalado y corriendo
--   [x] **Docker Compose** v2.x o superior
--   [x] **8 GB RAM mínimo** disponible (16 GB recomendado)
--   [x] **20 GB espacio en disco** libre
--   [x] **PowerShell** (Windows) o **Bash** (Linux/Mac)
+## Step-by-Step Setup
 
-### 📂 Dataset Incluido ✅
-
-**¡Buenas noticias!** El dataset ya está incluido en el proyecto:
-
--   **Ubicación**: `spark/data/ukraine-war-tweets/`
--   **Archivos**: 50+ archivos CSV diarios (Agosto-Octubre 2022)
--   **Tweets**: Miles de tweets únicos sobre la guerra en Ucrania
--   **Estado**: Listo para usar, no necesitas descargar nada
-
----
-
-## 🎯 Pasos para Iniciar
-
-### 1️⃣ Clonar el Repositorio
-
-```powershell
-# Windows PowerShell
-git clone https://github.com/GabrielFallas/ukraine-tweets-sentiment-analysis.git
-cd ukraine-tweets-sentiment-analysis
-```
+### 1. Clone or Download (1 minute)
 
 ```bash
-# Linux/Mac
-git clone https://github.com/GabrielFallas/ukraine-tweets-sentiment-analysis.git
+# If using Git
+git clone https://github.com/yourusername/ukraine-tweets-sentiment-analysis.git
 cd ukraine-tweets-sentiment-analysis
+
+# Or download and extract ZIP
 ```
 
-### 2️⃣ Configurar Variables de Entorno
+### 2. Run Setup Script (1 minute)
 
-El archivo `.env` ya existe con valores por defecto. Para producción, cámbialo:
+**Windows:**
 
-```powershell
-# Windows - Opcional: editar configuración
-notepad .env
+```cmd
+setup.bat
+```
+
+**Linux/Mac:**
+
+```bash
+chmod +x setup.sh
+./setup.sh
+```
+
+This creates necessary directories and the `.env` file.
+
+### 3. Configure Environment (2 minutes)
+
+Generate required keys:
+
+**Fernet Key for Airflow:**
+
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+**Superset Secret Key:**
+
+```bash
+# Windows (PowerShell)
+$bytes = New-Object Byte[] 32; (New-Object Security.Cryptography.RNGCryptoServiceProvider).GetBytes($bytes); [Convert]::ToBase64String($bytes)
 
 # Linux/Mac
-nano .env
+openssl rand -base64 42
 ```
 
-**Para desarrollo/testing, puedes usar los valores por defecto sin cambios.**
+Edit `.env` file and paste the keys:
 
-### 3️⃣ Iniciar Todos los Servicios
+```env
+AIRFLOW_FERNET_KEY=YOUR_GENERATED_FERNET_KEY
+SUPERSET_SECRET_KEY=YOUR_GENERATED_SECRET_KEY
+```
 
-```powershell
-# Windows PowerShell - Opción 1 (Recomendada)
-.\manage.ps1 install
+### 4. Download Dataset (3 minutes)
 
-# Windows PowerShell - Opción 2 (Manual)
+1. Go to [Kaggle Dataset](https://www.kaggle.com/datasets/bwandowando/ukraine-russian-crisis-twitter-dataset-1-2-m-rows)
+2. Click "Download" (requires Kaggle account)
+3. Extract the CSV file
+4. Rename to `ukraine_tweets.csv`
+5. Place in `data/raw/` directory
+
+```bash
+# Verify file is in the right place
+ls data/raw/ukraine_tweets.csv  # Linux/Mac
+dir data\raw\ukraine_tweets.csv  # Windows
+```
+
+### 5. Build Docker Images (5-10 minutes)
+
+```bash
 docker-compose build
+```
+
+☕ Grab a coffee while Docker builds the images!
+
+### 6. Start All Services (2 minutes)
+
+```bash
 docker-compose up -d
 ```
 
-```bash
-# Linux/Mac - Opción 1 (Recomendada)
-make install
+Wait 2-3 minutes for all services to initialize.
 
-# Linux/Mac - Opción 2 (Manual)
-docker-compose build
-docker-compose up -d
-```
+### 7. Verify Services (1 minute)
 
-⏱️ **Tiempo de inicio**: 5-10 minutos (primera vez)docker system prune
-
-```powershell
-# Windows
-.\manage.ps1 health
-
-# Linux/Mac
-make health
-```
-
-Deberías ver todos los servicios como ✅ OK
-
----
-
-## 🌐 Acceder a las Interfaces
-
-Una vez iniciado, abre tu navegador y accede a:
-
-| Servicio            | URL                   | Usuario | Contraseña |
-| ------------------- | --------------------- | ------- | ---------- |
-| **Airflow** 🎯      | http://localhost:8080 | `admin` | `admin`    |
-| **Spark UI** ⚡     | http://localhost:8081 | -       | -          |
-| **Superset** 📊     | http://localhost:8088 | `admin` | `admin`    |
-| **Druid** 🗄️        | http://localhost:8888 | -       | -          |
-| **OpenMetadata** 🏛️ | http://localhost:8585 | `admin` | `admin`    |
-
----
-
-## ▶️ Ejecutar el Pipeline
-
-### Opción 1: Desde Airflow UI (Recomendada)
-
-1. Abrir http://localhost:8080
-2. Login con `admin` / `admin`
-3. Buscar el DAG: **`ukraine_sentiment_pipeline`**
-4. Activar el DAG (toggle a la izquierda)
-5. Click en el botón ▶️ "Trigger DAG"
-6. Monitorear en la vista "Graph" o "Grid"
-
-### Opción 2: Desde la Línea de Comandos
-
-```powershell
-# Windows
-.\manage.ps1 trigger-dag
-
-# Linux/Mac
-make trigger-dag
-```
-
-### ⏱️ Tiempo de Ejecución
-
--   **Carga de datos**: ~2-3 minutos
--   **Análisis con ML**: ~10-20 minutos (depende del hardware)
--   **Carga a Druid**: ~1-2 minutos
--   **Catalogación**: ~1 minuto
-
-**Total**: ~15-30 minutos para el pipeline completo
-
----
-
-## 📊 Ver Resultados
-
-### 1. Monitorear en Airflow
-
--   **URL**: http://localhost:8080
--   Ver estado de cada tarea
--   Revisar logs en tiempo real
--   Ver métricas de ejecución
-
-### 2. Ver Resultados en Spark
-
-```powershell
-# Ver archivos generados
-docker exec -it spark-master ls -lh /opt/spark/output/ukraine_sentiment_results/
-
-# Ver contenido (primeras líneas)
-docker exec -it spark-master head /opt/spark/output/ukraine_sentiment_results/sentiment=positive/*.parquet
-```
-
-### 3. Consultar en Druid
-
-1. Abrir http://localhost:8888
-2. Ir a "Query"
-3. Ver el datasource: `ukraine_sentiment_tweets`
-4. Ejecutar queries SQL
-
-### 4. Crear Dashboards en Superset
-
-1. Abrir http://localhost:8088
-2. Login: `admin` / `admin`
-3. Settings > Database Connections > + Database
-4. Seleccionar: Apache Druid
-5. SQLAlchemy URI: `druid://druid:8888/druid/v2/sql`
-6. Test Connection > Save
-7. Crear charts y dashboards
-
-### 5. Explorar en OpenMetadata
-
-1. Abrir http://localhost:8585
-2. Login: `admin` / `admin`
-3. Explorar:
-    - **Explore** > Ver catálogo de datos
-    - **Lineage** > Ver flujo de datos
-    - **Data Quality** > Métricas de calidad
-
----
-
-## 🎨 Ejemplos de Visualizaciones
-
-### Chart 1: Distribución de Sentimientos (Pie Chart)
-
-```
-Positivo: 35%
-Neutral:  45%
-Negativo: 20%
-```
-
-### Chart 2: Tendencia Temporal (Line Chart)
-
-Evolución de sentimientos día a día
-
-### Chart 3: Top Hashtags por Sentimiento
-
-Los hashtags más usados en tweets positivos vs negativos
-
----
-
-## 🛑 Detener los Servicios
-
-```powershell
-# Windows - Detener sin eliminar datos
-.\manage.ps1 down
-
-# Windows - Detener y eliminar TODO (incluye datos)
-.\manage.ps1 down-volumes
-```
+Check all services are running:
 
 ```bash
-# Linux/Mac - Detener sin eliminar datos
-make down
-
-# Linux/Mac - Detener y eliminar TODO
-make down-volumes
+docker-compose ps
 ```
 
----
+You should see 14 containers running.
 
-## 🔍 Ver Logs
+### 8. Access the Services
 
-```powershell
-# Windows - Ver todos los logs
-.\manage.ps1 logs
+Open your browser and verify:
 
-# Ver logs de un servicio específico
-.\manage.ps1 logs-airflow
-.\manage.ps1 logs-spark
-.\manage.ps1 logs-openmetadata
-```
+✅ **Airflow**: http://localhost:8080 (admin/admin)
+✅ **Spark**: http://localhost:8081
+✅ **Superset**: http://localhost:8088 (admin/admin)
+✅ **Druid**: http://localhost:8888
+✅ **OpenMetadata**: http://localhost:8585 (admin/admin)
+
+### 9. Run the Pipeline (1-2 hours depending on dataset size)
+
+1. Go to Airflow: http://localhost:8080
+2. Find the DAG: `twitter_sentiment_pipeline`
+3. Toggle it ON (click the switch)
+4. Click the Play button (▶️) to trigger manually
+5. Click the DAG name to view execution
+6. Watch the progress in Graph view
+
+The pipeline will:
+
+-   Validate input data ✓
+-   Run Spark sentiment analysis (longest step)
+-   Validate output ✓
+-   Prepare Druid ingestion spec ✓
+-   Submit to Druid ✓
+-   Log metadata ✓
+
+### 10. View Results
+
+**Option A: Superset Dashboards**
+
+1. Go to http://localhost:8088
+2. Login (admin/admin)
+3. Click "Databases" → "+" → "Druid"
+4. URI: `druid://druid-broker:8082/druid/v2/sql/`
+5. Test connection and Save
+6. Create charts from `ukraine_tweets_sentiment` dataset
+
+**Option B: Direct Druid Queries**
 
 ```bash
-# Linux/Mac - Ver todos los logs
-make logs
-
-# Ver logs de servicios específicos
-make logs-airflow
-make logs-spark
+curl -X POST 'http://localhost:8888/druid/v2/sql' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "query": "SELECT sentiment, COUNT(*) as count FROM ukraine_tweets_sentiment GROUP BY sentiment"
+  }'
 ```
 
----
+**Option C: SQL Lab in Superset**
 
-## 🆘 Problemas Comunes
+1. Go to Superset → SQL Lab
+2. Select Druid database
+3. Run queries:
+    ```sql
+    SELECT * FROM ukraine_tweets_sentiment LIMIT 10;
+    SELECT sentiment, COUNT(*) FROM ukraine_tweets_sentiment GROUP BY sentiment;
+    ```
 
-### "Contenedor no inicia"
+## Troubleshooting Quick Fixes
 
-```powershell
-# Ver logs del servicio con problemas
-docker-compose logs <nombre-servicio>
+### Services won't start
 
-# Reiniciar servicio específico
-docker-compose restart <nombre-servicio>
+```bash
+# Increase Docker memory to 8GB+
+# Docker Desktop → Settings → Resources → Memory
 ```
 
-### "Puerto ya en uso"
+### Airflow shows error
 
-```powershell
-# Ver qué proceso usa el puerto
+```bash
+# Check .env has valid Fernet key
+docker-compose restart airflow-webserver airflow-scheduler
+```
+
+### Spark job fails
+
+```bash
+# Check logs
+docker-compose logs spark-master
+
+# Verify data file exists
+docker exec -it sentiment-airflow-webserver ls /opt/airflow/data/raw/
+```
+
+### Port already in use
+
+```bash
+# Windows - find process using port 8080
 netstat -ano | findstr :8080
+taskkill /PID <PID> /F
 
-# Cambiar puerto en docker-compose.yml o detener el proceso
+# Linux/Mac
+lsof -ti:8080 | xargs kill -9
 ```
 
-### "Sin memoria"
-
-1. Abrir Docker Desktop
-2. Settings > Resources > Memory
-3. Aumentar a mínimo 8 GB
-4. Apply & Restart
-
-### "Dataset no encontrado"
-
-```powershell
-# Verificar que el dataset existe
-ls .\spark\data\ukraine-war-tweets\
-
-# Debe mostrar 50+ archivos CSV
-```
-
-Para más ayuda, consulta: [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
-
----
-
-## 📚 Próximos Pasos
-
-Después de ejecutar el pipeline exitosamente:
-
-1. **Explorar los datos** en Druid Console
-2. **Crear visualizaciones** en Superset
-3. **Revisar el linaje** en OpenMetadata
-4. **Experimentar** con diferentes modelos ML
-5. **Contribuir** al proyecto (ver [CONTRIBUTING.md](CONTRIBUTING.md))
-
----
-
-## 🎓 Aprender Más
-
-### Documentación
-
--   [README.md](README.md) - Documentación completa
--   [ARCHITECTURE.md](ARCHITECTURE.md) - Arquitectura detallada
--   [TROUBLESHOOTING.md](TROUBLESHOOTING.md) - Resolución de problemas
--   [spark/data/DATASET_INFO.md](spark/data/DATASET_INFO.md) - Info del dataset
-
-### Comandos Útiles
-
-```powershell
-# Windows
-.\manage.ps1 help              # Ver todos los comandos
-.\manage.ps1 ps                # Ver estado de servicios
-.\manage.ps1 health            # Verificar salud
-.\manage.ps1 backup-db         # Hacer backup
-.\manage.ps1 clean             # Limpiar archivos temporales
-```
+### Complete reset
 
 ```bash
-# Linux/Mac
-make help                      # Ver todos los comandos
-make ps                        # Ver estado
-make health                    # Verificar salud
-make backup-db                 # Backup
+docker-compose down -v
+docker system prune -a
+# Then start from Step 5
 ```
 
+## Next Steps
+
+✅ **Explore Data**: Query Druid for insights
+✅ **Create Dashboards**: Build visualizations in Superset
+✅ **Schedule**: Set DAG to run daily
+✅ **Customize**: Modify sentiment analysis model
+✅ **Scale**: Add more Spark workers
+
+## Useful Commands
+
+```bash
+# View all logs
+docker-compose logs -f
+
+# View specific service logs
+docker-compose logs -f airflow-webserver
+
+# Check service status
+docker-compose ps
+
+# Stop all services
+docker-compose down
+
+# Restart a service
+docker-compose restart <service-name>
+
+# Access container shell
+docker exec -it sentiment-airflow-webserver bash
+```
+
+## Performance Tips
+
+🚀 **For faster processing:**
+
+1. **Test with subset first:**
+
+    - Edit `spark/sentiment_analysis.py`
+    - Add `df = df.limit(10000)` after loading data
+
+2. **Increase resources:**
+
+    - Docker Desktop → Settings → Resources
+    - Increase CPUs and Memory
+
+3. **Add more workers:**
+    - Edit `docker-compose.yml`
+    - Duplicate `spark-worker` service
+
+## Getting Help
+
+📖 **Documentation:**
+
+-   Full guide: `README.md`
+-   Architecture: `ARCHITECTURE.md`
+-   Issues: `TROUBLESHOOTING.md`
+
+🐛 **Issues:**
+
+-   Check logs: `docker-compose logs <service>`
+-   Search GitHub issues
+-   Open new issue with logs
+
+## Success Metrics
+
+After completing setup, you should have:
+
+✅ All 14 containers running
+✅ Airflow DAG executed successfully
+✅ Processed data in `data/processed/`
+✅ Data visible in Druid queries
+✅ Dashboards displaying sentiment analysis
+
+**Congratulations! Your sentiment analysis pipeline is running!** 🎉
+
 ---
 
-## ✅ Checklist de Verificación
+**Estimated Total Time:** 15-30 minutes (excluding pipeline execution time)
 
-Antes de ejecutar el pipeline, verifica:
+**Dataset Processing Time:** 1-2 hours for full 1.2M rows (depends on hardware)
 
--   [ ] Docker Desktop está corriendo
--   [ ] Tienes 8+ GB RAM disponible
--   [ ] Tienes 20+ GB espacio en disco
--   [ ] El archivo `.env` existe
--   [ ] El dataset está en `spark/data/ukraine-war-tweets/`
--   [ ] Puertos 8080, 8081, 8088, 8888, 8585 están libres
--   [ ] Has esperado 5-10 min para que todos los servicios inicien
-
----
-
-## 🎉 ¡Listo!
-
-Si todos los pasos anteriores funcionaron:
-
-✅ **Tu pipeline está corriendo**  
-✅ **El dataset está siendo procesado**  
-✅ **Los servicios están disponibles**  
-✅ **Puedes visualizar los resultados**
-
-**¡Felicitaciones! 🎊 Ahora tienes un sistema completo de análisis de sentimiento con gobernanza de datos.**
-
----
-
-## 📞 Soporte
-
-¿Necesitas ayuda?
-
--   📖 Lee la [documentación completa](README.md)
--   🔧 Consulta [troubleshooting](TROUBLESHOOTING.md)
--   💬 Abre un [issue en GitHub](https://github.com/GabrielFallas/ukraine-tweets-sentiment-analysis/issues)
--   📧 Email: gabriel@example.com
-
----
-
-**Última actualización**: Octubre 2025  
-**Versión**: 1.0.0  
-**Estado**: ✅ Completamente funcional con dataset incluido
+**Recommended:** Test with a subset first (10,000-100,000 rows) before processing the full dataset.

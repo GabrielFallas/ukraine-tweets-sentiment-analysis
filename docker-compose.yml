@@ -1,418 +1,392 @@
-# ==============================================
-# DOCKER COMPOSE - PIPELINE DE ANÁLISIS DE SENTIMIENTO
-# ==============================================
-# Arquitectura completa con gobernanza de datos:
-# - 3 bases de datos PostgreSQL (Airflow, Superset, OpenMetadata)
-# - Apache Airflow (orquestación)
-# - Apache Spark (procesamiento)
-# - Apache Druid (almacenamiento analítico)
-# - Apache Superset (visualización)
-# - OpenMetadata (gobernanza y linaje de datos)
-# - Elasticsearch (búsqueda para OpenMetadata)
-
 services:
-    # ==============================================
-    # BASES DE DATOS POSTGRESQL
-    # ==============================================
-
-    # PostgreSQL para Airflow
-    postgres_airflow_db:
-        image: postgres:14
-        container_name: postgres_airflow_db
+    # PostgreSQL - Metadata Store
+    postgres:
+        image: postgres:14-alpine
+        container_name: sentiment-postgres
         environment:
-            POSTGRES_USER: ${POSTGRES_AIRFLOW_USER}
-            POSTGRES_PASSWORD: ${POSTGRES_AIRFLOW_PASSWORD}
-            POSTGRES_DB: ${POSTGRES_AIRFLOW_DB}
-        volumes:
-            - postgres_airflow_data:/var/lib/postgresql/data
+            POSTGRES_USER: airflow
+            POSTGRES_PASSWORD: airflow
+            POSTGRES_DB: airflow
+            POSTGRES_MULTIPLE_DATABASES: druid,superset,openmetadata
         ports:
             - "5432:5432"
+        volumes:
+            - postgres-data:/var/lib/postgresql/data
+            - ./scripts/init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh
         networks:
-            - ukraine_sentiment_network
+            - sentiment-network
         healthcheck:
-            test: ["CMD", "pg_isready", "-U", "airflow"]
+            test: ["CMD-SHELL", "pg_isready -U airflow"]
             interval: 10s
             timeout: 5s
             retries: 5
 
-    # PostgreSQL para Superset
-    postgres_superset_db:
-        image: postgres:14
-        container_name: postgres_superset_db
-        environment:
-            POSTGRES_USER: ${POSTGRES_SUPERSET_USER}
-            POSTGRES_PASSWORD: ${POSTGRES_SUPERSET_PASSWORD}
-            POSTGRES_DB: ${POSTGRES_SUPERSET_DB}
-        volumes:
-            - postgres_superset_data:/var/lib/postgresql/data
-        ports:
-            - "5433:5432"
-        networks:
-            - ukraine_sentiment_network
-        healthcheck:
-            test: ["CMD", "pg_isready", "-U", "superset"]
-            interval: 10s
-            timeout: 5s
-            retries: 5
-
-    # PostgreSQL para OpenMetadata
-    postgres_openmetadata_db:
-        image: postgres:14
-        container_name: postgres_openmetadata_db
-        environment:
-            POSTGRES_USER: ${POSTGRES_OPENMETADATA_USER}
-            POSTGRES_PASSWORD: ${POSTGRES_OPENMETADATA_PASSWORD}
-            POSTGRES_DB: ${POSTGRES_OPENMETADATA_DB}
-        volumes:
-            - postgres_openmetadata_data:/var/lib/postgresql/data
-        ports:
-            - "5434:5432"
-        networks:
-            - ukraine_sentiment_network
-        healthcheck:
-            test: ["CMD", "pg_isready", "-U", "openmetadata"]
-            interval: 10s
-            timeout: 5s
-            retries: 5
-
-    # ==============================================
-    # ELASTICSEARCH (Para OpenMetadata)
-    # ==============================================
-
-    elasticsearch:
-        image: docker.elastic.co/elasticsearch/elasticsearch:8.10.2
-        container_name: elasticsearch
-        environment:
-            - discovery.type=single-node
-            - xpack.security.enabled=false
-            - ES_JAVA_OPTS=-Xms512m -Xmx512m
-        volumes:
-            - elasticsearch_data:/usr/share/elasticsearch/data
-        ports:
-            - "9200:9200"
-            - "9300:9300"
-        networks:
-            - ukraine_sentiment_network
-        healthcheck:
-            test:
-                [
-                    "CMD-SHELL",
-                    "curl -f http://localhost:9200/_cluster/health || exit 1",
-                ]
-            interval: 30s
-            timeout: 10s
-            retries: 5
-
-    # ==============================================
-    # APACHE AIRFLOW
-    # ==============================================
-
-    # Inicialización de Airflow
-    airflow-init:
-        build:
-            context: ./airflow
-            dockerfile: Dockerfile
-        container_name: airflow-init
-        depends_on:
-            postgres_airflow_db:
-                condition: service_healthy
-        environment:
-            - AIRFLOW__CORE__EXECUTOR=${AIRFLOW__CORE__EXECUTOR}
-            - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=${AIRFLOW__DATABASE__SQL_ALCHEMY_CONN}
-            - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW__CORE__FERNET_KEY}
-            - _AIRFLOW_WWW_USER_USERNAME=${_AIRFLOW_WWW_USER_USERNAME}
-            - _AIRFLOW_WWW_USER_PASSWORD=${_AIRFLOW_WWW_USER_PASSWORD}
-            - _AIRFLOW_DB_MIGRATE=true
-            - _AIRFLOW_WWW_USER_CREATE=true
-        volumes:
-            - ./airflow/dags:/opt/airflow/dags
-            - ./openmetadata/ingestion_configs:/opt/airflow/openmetadata/ingestion_configs
-            - airflow_logs:/opt/airflow/logs
-        entrypoint: /bin/bash
-        command:
-            - -c
-            - |
-                airflow db upgrade
-                airflow users create \
-                  --username $${_AIRFLOW_WWW_USER_USERNAME} \
-                  --firstname Admin \
-                  --lastname User \
-                  --role Admin \
-                  --email admin@example.com \
-                  --password $${_AIRFLOW_WWW_USER_PASSWORD}
-        networks:
-            - ukraine_sentiment_network
-
-    # Webserver de Airflow
+    # Apache Airflow - Webserver
     airflow-webserver:
         build:
             context: ./airflow
             dockerfile: Dockerfile
-        container_name: airflow-webserver
+        container_name: sentiment-airflow-webserver
         depends_on:
-            airflow-init:
-                condition: service_completed_successfully
+            postgres:
+                condition: service_healthy
         environment:
-            - AIRFLOW__CORE__EXECUTOR=${AIRFLOW__CORE__EXECUTOR}
-            - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=${AIRFLOW__DATABASE__SQL_ALCHEMY_CONN}
-            - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW__CORE__FERNET_KEY}
-            - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=${AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION}
-            - AIRFLOW__CORE__LOAD_EXAMPLES=${AIRFLOW__CORE__LOAD_EXAMPLES}
-            - AIRFLOW__API__AUTH_BACKENDS=${AIRFLOW__API__AUTH_BACKENDS}
-            - AIRFLOW__WEBSERVER__SECRET_KEY=${AIRFLOW__WEBSERVER__SECRET_KEY}
+            AIRFLOW__CORE__EXECUTOR: LocalExecutor
+            AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+            AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY}
+            AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+            AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+            AIRFLOW__API__AUTH_BACKENDS: "airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session"
+            AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
+            _AIRFLOW_DB_MIGRATE: "true"
+            _AIRFLOW_WWW_USER_CREATE: "true"
+            _AIRFLOW_WWW_USER_USERNAME: admin
+            _AIRFLOW_WWW_USER_PASSWORD: admin
         volumes:
             - ./airflow/dags:/opt/airflow/dags
-            - ./openmetadata/ingestion_configs:/opt/airflow/openmetadata/ingestion_configs
-            - airflow_logs:/opt/airflow/logs
-            - ./spark/data:/opt/spark/data
-            - ./spark/app:/opt/spark/app
+            - ./airflow/logs:/opt/airflow/logs
+            - ./airflow/plugins:/opt/airflow/plugins
+            - ./data:/opt/airflow/data
+            - ./spark:/opt/airflow/spark
+            - airflow-data:/opt/airflow
         ports:
             - "8080:8080"
-        command: webserver
         networks:
-            - ukraine_sentiment_network
+            - sentiment-network
+        command: webserver
         healthcheck:
             test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
             interval: 30s
             timeout: 10s
             retries: 5
+            start_period: 30s
 
-    # Scheduler de Airflow
+    # Apache Airflow - Scheduler
     airflow-scheduler:
         build:
             context: ./airflow
             dockerfile: Dockerfile
-        container_name: airflow-scheduler
+        container_name: sentiment-airflow-scheduler
         depends_on:
-            airflow-init:
-                condition: service_completed_successfully
+            postgres:
+                condition: service_healthy
+            airflow-webserver:
+                condition: service_healthy
         environment:
-            - AIRFLOW__CORE__EXECUTOR=${AIRFLOW__CORE__EXECUTOR}
-            - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=${AIRFLOW__DATABASE__SQL_ALCHEMY_CONN}
-            - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW__CORE__FERNET_KEY}
-            - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=${AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION}
-            - AIRFLOW__CORE__LOAD_EXAMPLES=${AIRFLOW__CORE__LOAD_EXAMPLES}
+            AIRFLOW__CORE__EXECUTOR: LocalExecutor
+            AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+            AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY}
+            AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+            AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+            AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
         volumes:
             - ./airflow/dags:/opt/airflow/dags
-            - ./openmetadata/ingestion_configs:/opt/airflow/openmetadata/ingestion_configs
-            - airflow_logs:/opt/airflow/logs
-            - ./spark/data:/opt/spark/data
-            - ./spark/app:/opt/spark/app
-        command: scheduler
+            - ./airflow/logs:/opt/airflow/logs
+            - ./airflow/plugins:/opt/airflow/plugins
+            - ./data:/opt/airflow/data
+            - ./spark:/opt/airflow/spark
+            - airflow-data:/opt/airflow
         networks:
-            - ukraine_sentiment_network
+            - sentiment-network
+        command: scheduler
+        healthcheck:
+            test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
+            interval: 30s
+            timeout: 10s
+            retries: 5
+            start_period: 30s
+
+    # Spark Master
+    spark-master:
+        build:
+            context: ./spark
+            dockerfile: Dockerfile
+        container_name: sentiment-spark-master
+        user: root
+        environment:
+            - SPARK_MODE=master
+            - SPARK_MASTER_HOST=spark-master
+            - SPARK_MASTER_PORT=7077
+            - SPARK_NO_DAEMONIZE=true
+            - SPARK_USER=root
+        ports:
+            - "8081:8080"
+            - "7077:7077"
+        volumes:
+            - ./spark:/opt/spark-apps
+            - ./data:/opt/spark-data
+        networks:
+            - sentiment-network
+        command: ["/opt/spark/sbin/start-master.sh", "-h", "0.0.0.0"]
+        healthcheck:
+            test: ["CMD", "curl", "--fail", "http://localhost:8080"]
+            interval: 30s
+            timeout: 10s
+            retries: 3
+
+    # Spark Worker
+    spark-worker:
+        build:
+            context: ./spark
+            dockerfile: Dockerfile
+        container_name: sentiment-spark-worker
+        user: root
+        depends_on:
+            - spark-master
+        environment:
+            - SPARK_MODE=worker
+            - SPARK_MASTER=spark://spark-master:7077
+            - SPARK_WORKER_MEMORY=4G
+            - SPARK_WORKER_CORES=2
+            - SPARK_NO_DAEMONIZE=true
+            - SPARK_USER=root
+        volumes:
+            - ./spark:/opt/spark-apps
+            - ./data:/opt/spark-data
+        networks:
+            - sentiment-network
+        command:
+            ["/opt/spark/sbin/start-worker.sh", "spark://spark-master:7077"]
+
+    # Apache Druid - Coordinator
+    druid-coordinator:
+        image: apache/druid:28.0.1
+        container_name: sentiment-druid-coordinator
+        depends_on:
+            postgres:
+                condition: service_healthy
+        environment:
+            - DRUID_XMX=1g
+            - DRUID_XMS=1g
+            - DRUID_MAXNEWSIZE=250m
+            - DRUID_NEWSIZE=250m
+            - druid_extensions_loadList=["druid-histogram", "druid-datasketches", "druid-lookups-cached-global", "postgresql-metadata-storage", "druid-kafka-indexing-service"]
+            - druid_metadata_storage_type=postgresql
+            - druid_metadata_storage_connector_connectURI=jdbc:postgresql://postgres:5432/druid
+            - druid_metadata_storage_connector_user=airflow
+            - druid_metadata_storage_connector_password=airflow
+            - druid_coordinator_asOverlord_enabled=true
+            - druid_coordinator_asOverlord_overlordService=druid/overlord
+            - druid_indexer_runner_type=local
+            - druid_zk_service_host=druid-zookeeper
+        ports:
+            - "8082:8081"
+        volumes:
+            - druid-coordinator-data:/opt/druid/var
+            - ./data:/opt/druid/data
+        networks:
+            - sentiment-network
+        command:
+            - coordinator
+
+    # Apache Druid - Broker
+    druid-broker:
+        image: apache/druid:28.0.1
+        container_name: sentiment-druid-broker
+        depends_on:
+            - druid-coordinator
+        environment:
+            - DRUID_XMX=1g
+            - DRUID_XMS=1g
+            - DRUID_MAXNEWSIZE=250m
+            - DRUID_NEWSIZE=250m
+            - druid_extensions_loadList=["druid-histogram", "druid-datasketches", "druid-lookups-cached-global", "postgresql-metadata-storage"]
+            - druid_metadata_storage_type=postgresql
+            - druid_metadata_storage_connector_connectURI=jdbc:postgresql://postgres:5432/druid
+            - druid_metadata_storage_connector_user=airflow
+            - druid_metadata_storage_connector_password=airflow
+            - druid_zk_service_host=druid-zookeeper
+        ports:
+            - "8083:8082"
+        volumes:
+            - druid-broker-data:/opt/druid/var
+        networks:
+            - sentiment-network
+        command:
+            - broker
+
+    # Apache Druid - Historical
+    druid-historical:
+        image: apache/druid:28.0.1
+        container_name: sentiment-druid-historical
+        depends_on:
+            - druid-coordinator
+        environment:
+            - DRUID_XMX=1g
+            - DRUID_XMS=1g
+            - DRUID_MAXNEWSIZE=250m
+            - DRUID_NEWSIZE=250m
+            - druid_extensions_loadList=["druid-histogram", "druid-datasketches", "druid-lookups-cached-global", "postgresql-metadata-storage"]
+            - druid_metadata_storage_type=postgresql
+            - druid_metadata_storage_connector_connectURI=jdbc:postgresql://postgres:5432/druid
+            - druid_metadata_storage_connector_user=airflow
+            - druid_metadata_storage_connector_password=airflow
+            - druid_zk_service_host=druid-zookeeper
+        ports:
+            - "8084:8083"
+        volumes:
+            - druid-historical-data:/opt/druid/var
+            - ./data:/opt/druid/data
+        networks:
+            - sentiment-network
+        command:
+            - historical
+
+    # Apache Druid - Router
+    druid-router:
+        image: apache/druid:28.0.1
+        container_name: sentiment-druid-router
+        depends_on:
+            - druid-broker
+        environment:
+            - DRUID_XMX=512m
+            - DRUID_XMS=512m
+            - druid_extensions_loadList=["druid-histogram", "druid-datasketches", "druid-lookups-cached-global"]
+            - druid_zk_service_host=druid-zookeeper
+        ports:
+            - "8888:8888"
+        volumes:
+            - druid-router-data:/opt/druid/var
+        networks:
+            - sentiment-network
+        command:
+            - router
+
+    # ZooKeeper for Druid
+    druid-zookeeper:
+        image: zookeeper:3.8
+        container_name: sentiment-druid-zookeeper
+        environment:
+            ZOO_MY_ID: 1
+            ZOO_SERVERS: server.1=druid-zookeeper:2888:3888;2181
+        ports:
+            - "2181:2181"
+        volumes:
+            - zookeeper-data:/data
+            - zookeeper-datalog:/datalog
+        networks:
+            - sentiment-network
+
+    # Apache Superset
+    superset:
+        build:
+            context: ./superset
+            dockerfile: Dockerfile
+        container_name: sentiment-superset
+        depends_on:
+            postgres:
+                condition: service_healthy
+            druid-broker:
+                condition: service_started
+        environment:
+            DATABASE_DB: superset
+            DATABASE_HOST: postgres
+            DATABASE_PASSWORD: airflow
+            DATABASE_USER: airflow
+            SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY}
+            SUPERSET_LOAD_EXAMPLES: "no"
+        ports:
+            - "8088:8088"
+        volumes:
+            - superset-data:/app/superset_home
+            - ./superset/dashboards:/app/dashboards
+            - ./superset/init_superset.sh:/app/init_superset.sh
+        networks:
+            - sentiment-network
+        command: >
+            sh -c "
+            superset db upgrade &&
+            superset fab create-admin --username admin --firstname Admin --lastname User --email admin@superset.com --password admin &&
+            superset init &&
+            /app/init_superset.sh &&
+            gunicorn --bind 0.0.0.0:8088 --workers 4 --timeout 120 --limit-request-line 0 --limit-request-field_size 0 'superset.app:create_app()'
+            "
+        healthcheck:
+            test: ["CMD", "curl", "--fail", "http://localhost:8088/health"]
+            interval: 30s
+            timeout: 10s
+            retries: 3
+
+    # OpenMetadata
+    openmetadata:
+        image: openmetadata/server:1.3.3
+        container_name: sentiment-openmetadata
+        depends_on:
+            postgres:
+                condition: service_healthy
+        environment:
+            DB_DRIVER_CLASS: org.postgresql.Driver
+            DB_SCHEME: postgresql
+            DB_USE_SSL: "false"
+            DB_USER: airflow
+            DB_USER_PASSWORD: airflow
+            DB_HOST: postgres
+            DB_PORT: 5432
+            OM_DATABASE: openmetadata
+            ELASTICSEARCH_HOST: openmetadata-elasticsearch
+            ELASTICSEARCH_PORT: 9200
+            PIPELINE_SERVICE_CLIENT_ENABLED: "true"
+            AIRFLOW_HOST: http://airflow-webserver:8080
+            SERVER_HOST_API_URL: http://openmetadata:8585/api
+            AUTHENTICATION_PROVIDER: basic
+            AUTHENTICATION_PUBLIC_KEYS: "[http://openmetadata:8585/api/v1/system/config/jwks]"
+            AUTHENTICATION_CALLBACK_URL: http://localhost:8585/callback
+            AUTHORIZER_CLASS_NAME: org.openmetadata.service.security.DefaultAuthorizer
+            AUTHORIZER_REQUEST_FILTER: org.openmetadata.service.security.JwtFilter
+            AUTHORIZER_ADMIN_PRINCIPALS: "[admin]"
+            AUTHORIZER_PRINCIPAL_DOMAIN: open-metadata.org
+        ports:
+            - "8585:8585"
+        volumes:
+            - openmetadata-data:/opt/openmetadata
+        networks:
+            - sentiment-network
+        healthcheck:
+            test:
+                ["CMD", "curl", "--fail", "http://localhost:8585/api/v1/health"]
+            interval: 30s
+            timeout: 10s
+            retries: 5
+            start_period: 60s
+
+    # Elasticsearch for OpenMetadata
+    openmetadata-elasticsearch:
+        image: docker.elastic.co/elasticsearch/elasticsearch:8.10.4
+        container_name: sentiment-elasticsearch
+        environment:
+            - discovery.type=single-node
+            - xpack.security.enabled=false
+            - ES_JAVA_OPTS=-Xms512m -Xmx512m
+        ports:
+            - "9200:9200"
+            - "9300:9300"
+        volumes:
+            - elasticsearch-data:/usr/share/elasticsearch/data
+        networks:
+            - sentiment-network
         healthcheck:
             test:
                 [
-                    "CMD",
-                    "airflow",
-                    "jobs",
-                    "check",
-                    "--job-type",
-                    "SchedulerJob",
+                    "CMD-SHELL",
+                    "curl --fail http://localhost:9200/_cluster/health || exit 1",
                 ]
             interval: 30s
             timeout: 10s
             retries: 5
 
-    # ==============================================
-    # APACHE SPARK
-    # ==============================================
-
-    # Spark Master
-    spark-master:
-        image: apache/spark:3.5.0
-        container_name: spark-master
-        command: /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
-        environment:
-            - SPARK_NO_DAEMONIZE=true
-        volumes:
-            - ./spark/app:/opt/spark/app
-            - ./spark/data:/opt/spark/data
-            - spark_output:/opt/spark/output
-        ports:
-            - "8081:8080"
-            - "7077:7077"
-        networks:
-            - ukraine_sentiment_network
-
-    # Spark Worker
-    spark-worker:
-        image: apache/spark:3.5.0
-        container_name: spark-worker
-        command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
-        depends_on:
-            - spark-master
-        environment:
-            - SPARK_NO_DAEMONIZE=true
-            - SPARK_WORKER_CORES=${SPARK_WORKER_CORES}
-            - SPARK_WORKER_MEMORY=${SPARK_WORKER_MEMORY}
-        volumes:
-            - ./spark/app:/opt/spark/app
-            - ./spark/data:/opt/spark/data
-            - spark_output:/opt/spark/output
-        ports:
-            - "8082:8081"
-        networks:
-            - ukraine_sentiment_network
-
-    # ==============================================
-    # APACHE DRUID - COMMENTED OUT DUE TO CONFIGURATION ISSUES
-    # ==============================================
-
-    # druid:
-    #     image: apache/druid:27.0.0
-    #     container_name: druid
-    #     environment:
-    #         - DRUID_SINGLE_NODE_CONF=nano-quickstart
-    #     volumes:
-    #         - druid_data:/opt/druid/var
-    #     ports:
-    #         - "8888:8888"
-    #     networks:
-    #         - ukraine_sentiment_network
-    #     healthcheck:
-    #         test: ["CMD", "curl", "-f", "http://localhost:8888/status/health"]
-    #         interval: 30s
-    #         timeout: 10s
-    #         retries: 5
-
-    # ==============================================
-    # APACHE SUPERSET
-    # ==============================================
-
-    superset:
-        image: apache/superset:3.0.1
-        container_name: superset
-        depends_on:
-            postgres_superset_db:
-                condition: service_healthy
-        environment:
-            - SUPERSET_SECRET_KEY=${SUPERSET_SECRET_KEY}
-            - SQLALCHEMY_DATABASE_URI=${SUPERSET_DATABASE_URI}
-        volumes:
-            - superset_home:/app/superset_home
-        ports:
-            - "8088:8088"
-        networks:
-            - ukraine_sentiment_network
-        command: >
-            /bin/bash -c "
-            superset db upgrade &&
-            superset fab create-admin \
-              --username ${SUPERSET_ADMIN_USERNAME} \
-              --firstname Admin \
-              --lastname User \
-              --email ${SUPERSET_ADMIN_EMAIL} \
-              --password ${SUPERSET_ADMIN_PASSWORD} || true &&
-            superset init &&
-            /usr/bin/run-server.sh
-            "
-        healthcheck:
-            test: ["CMD", "curl", "-f", "http://localhost:8088/health"]
-            interval: 30s
-            timeout: 10s
-            retries: 5
-
-    # ==============================================
-    # OPENMETADATA - COMMENTED OUT DUE TO INITIALIZATION ISSUES
-    # ==============================================
-
-    # # Servidor OpenMetadata
-    # openmetadata-server:
-    #     image: openmetadata/server:1.2.0
-    #     container_name: openmetadata-server
-    #     depends_on:
-    #         postgres_openmetadata_db:
-    #             condition: service_healthy
-    #         elasticsearch:
-    #             condition: service_healthy
-    #     environment:
-    #         # Database Configuration
-    #         - DB_DRIVER_CLASS=org.postgresql.Driver
-    #         - DB_SCHEME=postgresql
-    #         - DB_USE_SSL=false
-    #         - DB_HOST=${OPENMETADATA_DB_HOST}
-    #         - DB_PORT=${OPENMETADATA_DB_PORT}
-    #         - DB_USER=${OPENMETADATA_DB_USER}
-    #         - DB_USER_PASSWORD=${OPENMETADATA_DB_PASSWORD}
-    #         - OM_DATABASE=${OPENMETADATA_DB_NAME}
-
-    #         # Elasticsearch Configuration
-    #         - ELASTICSEARCH_HOST=${ELASTICSEARCH_HOST}
-    #         - ELASTICSEARCH_PORT=${ELASTICSEARCH_PORT}
-    #         - ELASTICSEARCH_SCHEME=http
-    #         - ELASTICSEARCH_USER=
-    #         - ELASTICSEARCH_PASSWORD=
-
-    #         # OpenMetadata Server Configuration
-    #         - SERVER_HOST=${OPENMETADATA_SERVER_HOST}
-    #         - SERVER_PORT=${OPENMETADATA_SERVER_PORT}
-    #         - OPENMETADATA_CLUSTER_NAME=${OPENMETADATA_CLUSTER_NAME}
-
-    #         # Authentication - Basic setup
-    #         - AUTHORIZER_CLASS_NAME=org.openmetadata.service.security.NoopAuthorizer
-    #         - AUTHENTICATION_PROVIDER=no-auth
-    #     volumes:
-    #         - openmetadata_data:/opt/openmetadata
-    #     ports:
-    #         - "8585:8585"
-    #     networks:
-    #         - ukraine_sentiment_network
-    #     healthcheck:
-    #         test: ["CMD", "curl", "-f", "http://localhost:8585/api/v1/health"]
-    #         interval: 30s
-    #         timeout: 10s
-    #         retries: 10
-
-    # # Ingestion de OpenMetadata (para ejecutar workflows)
-    # openmetadata-ingestion:
-    #     image: openmetadata/ingestion:1.2.0
-    #     container_name: openmetadata-ingestion
-    #     depends_on:
-    #         openmetadata-server:
-    #             condition: service_healthy
-    #     environment:
-    #         - OPENMETADATA_SERVER_HOST=${OPENMETADATA_SERVER_HOST}
-    #         - OPENMETADATA_SERVER_PORT=${OPENMETADATA_SERVER_PORT}
-    #     volumes:
-    #         - ./openmetadata/ingestion_configs:/opt/airflow/openmetadata/ingestion_configs
-    #     networks:
-    #         - ukraine_sentiment_network
-    #     command: >
-    #         /bin/bash -c "
-    #         echo 'OpenMetadata Ingestion container ready for workflows' &&
-    #         tail -f /dev/null
-    #         "
-
-# ==============================================
-# VOLÚMENES PERSISTENTES
-# ==============================================
+networks:
+    sentiment-network:
+        driver: bridge
 
 volumes:
-    postgres_airflow_data:
-        driver: local
-    postgres_superset_data:
-        driver: local
-    postgres_openmetadata_data:
-        driver: local
-    elasticsearch_data:
-        driver: local
-    airflow_logs:
-        driver: local
-    spark_output:
-        driver: local
-    druid_data:
-        driver: local
-    superset_home:
-        driver: local
-    openmetadata_data:
-        driver: local
-
-# ==============================================
-# RED PERSONALIZADA
-# ==============================================
-
-networks:
-    ukraine_sentiment_network:
-        driver: bridge
+    postgres-data:
+    airflow-data:
+    druid-coordinator-data:
+    druid-broker-data:
+    druid-historical-data:
+    druid-router-data:
+    zookeeper-data:
+    zookeeper-datalog:
+    superset-data:
+    openmetadata-data:
+    elasticsearch-data:

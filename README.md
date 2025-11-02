@@ -1,595 +1,407 @@
-# 🇺🇦 Pipeline de Análisis de Sentimiento - Tweets sobre Ucrania
+# Ukraine Tweets Sentiment Analysis Pipeline
 
-## 📋 Descripción
+A complete, containerized data pipeline for sentiment analysis of the Ukraine-Russia crisis Twitter dataset using modern data engineering tools.
 
-Pipeline de datos completo con **gobernanza de datos** para analizar el sentimiento de tweets sobre la guerra en Ucrania. Este proyecto implementa una arquitectura moderna de datos utilizando las mejores herramientas del ecosistema Big Data.
+## 🏗️ Architecture
 
-### 🎯 Características
+This project implements a production-grade data pipeline with the following components:
 
--   ✅ **Orquestación**: Apache Airflow para gestión de workflows
--   ✅ **Procesamiento Distribuido**: Apache Spark para análisis de sentimiento con ML
--   ✅ **Almacenamiento Analítico**: Apache Druid para consultas en tiempo real
--   ✅ **Visualización**: Apache Superset para dashboards interactivos
--   ✅ **Gobernanza de Datos**: OpenMetadata para catalogación y linaje de datos
--   ✅ **Análisis de Sentimiento**: Modelo XLM-RoBERTa multilingüe de Hugging Face
--   ✅ **Arquitectura Containerizada**: Docker Compose para fácil despliegue
+-   **Docker** - Containerization platform
+-   **Apache Airflow** - Workflow orchestration
+-   **Apache Spark** - Distributed data processing and sentiment analysis
+-   **PostgreSQL** - Metadata and results storage
+-   **Apache Druid** - Fast OLAP analytics
+-   **Apache Superset** - Data visualization and dashboards
+-   **OpenMetadata** - Data governance and lineage tracking
 
----
+## 📊 Dataset
 
-## 🏗️ Arquitectura del Sistema
+**Ukraine-Russia Crisis Twitter Dataset (1.2M rows)**
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         CAPA DE ORQUESTACIÓN                        │
-│                          Apache Airflow                             │
-│                     (Gestión de Workflows)                          │
-└────────────────────────────┬────────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                      CAPA DE PROCESAMIENTO                          │
-│                          Apache Spark                               │
-│              (Limpieza, Transformación, ML)                         │
-│                                                                     │
-│  ┌──────────────────┐    ┌──────────────────┐                     │
-│  │  Limpieza de     │───▶│  Análisis de     │                     │
-│  │  Texto           │    │  Sentimiento     │                     │
-│  │  (Regex, NLP)    │    │  (XLM-RoBERTa)   │                     │
-│  └──────────────────┘    └──────────────────┘                     │
-└────────────────────────────┬────────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                   CAPA DE ALMACENAMIENTO                            │
-│                         Apache Druid                                │
-│              (Base de Datos Analítica OLAP)                        │
-└────────────────────────────┬────────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                      CAPA DE VISUALIZACIÓN                          │
-│                        Apache Superset                              │
-│                 (Dashboards y Reportes)                            │
-└────────────────────────────┬────────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                    CAPA DE GOBERNANZA                               │
-│                        OpenMetadata                                 │
-│        (Catalogación, Linaje, Calidad de Datos)                    │
-└─────────────────────────────────────────────────────────────────────┘
-```
+-   Source: [Kaggle Dataset](https://www.kaggle.com/datasets/bwandowando/ukraine-russian-crisis-twitter-dataset-1-2-m-rows)
+-   Contains tweets related to the Ukraine-Russia crisis
+-   Fields: userid, username, location, tweet text, hashtags, timestamps, retweet counts, etc.
 
----
+## 🚀 Quick Start
 
-## 📁 Estructura del Proyecto
+### Prerequisites
 
-```
-ukraine-tweets-sentiment-analysis/
-│
-├── docker-compose.yml              # Definición de todos los servicios
-├── .env                            # Variables de entorno y credenciales
-│
-├── airflow/
-│   ├── Dockerfile                  # Imagen personalizada con OpenMetadata
-│   └── dags/
-│       └── ukraine_sentiment_pipeline_dag.py  # DAG principal
-│
-├── spark/
-│   ├── app/
-│   │   └── sentiment_analysis_job.py  # Script PySpark de análisis
-│   └── data/
-│       └── (coloca aquí ukraine_tweets.csv)
-│
-├── druid/
-│   └── (configuraciones de Druid)
-│
-└── openmetadata/
-    └── ingestion_configs/
-        ├── druid_config.yml        # Config de ingesta de Druid
-        └── superset_config.yml     # Config de ingesta de Superset
-```
+-   Docker Desktop (Windows/Mac) or Docker Engine (Linux)
+-   At least 16GB RAM
+-   20GB free disk space
+-   Python 3.11+ (for dataset download)
 
----
-
-## 🚀 Inicio Rápido
-
-### Prerrequisitos
-
--   **Docker** (versión 20.x o superior)
--   **Docker Compose** (versión 2.x o superior)
--   **8 GB RAM mínimo** (recomendado 16 GB)
--   **20 GB espacio en disco**
-
-### 1. Clonar el Repositorio
+### Step 1: Clone Repository
 
 ```bash
-git clone https://github.com/GabrielFallas/ukraine-tweets-sentiment-analysis.git
+git clone https://github.com/yourusername/ukraine-tweets-sentiment-analysis.git
 cd ukraine-tweets-sentiment-analysis
 ```
 
-### 2. Dataset Incluido ✅
+### Step 2: Download Dataset
 
-El dataset ya está incluido en el repositorio en la carpeta `spark/data/ukraine-war-tweets/`.
-
--   **Archivos**: 50+ archivos CSV diarios (agosto-octubre 2022)
--   **Formato**: `MMDD_UkraineCombinedTweetsDeduped.csv`
--   **Tweets totales**: Miles de tweets únicos sobre la guerra en Ucrania
--   **Columnas principales**:
-    -   `tweetid`, `text`, `tweetcreatedts`
-    -   `username`, `location`, `language`
-    -   `retweetcount`, `favorite_count`, `hashtags`
-
-**No necesitas descargar nada adicional** - el dataset está listo para usarse.
-
-### 3. Configurar Variables de Entorno
-
-El archivo `.env` ya está configurado con valores predeterminados. **IMPORTANTE**: En producción, cambia todas las contraseñas.
+1. Go to [Kaggle Dataset Page](https://www.kaggle.com/datasets/bwandowando/ukraine-russian-crisis-twitter-dataset-1-2-m-rows)
+2. Download the CSV file
+3. Place it in `data/raw/ukraine_tweets.csv`
 
 ```bash
-# Revisar configuración
-cat .env
-
-# (Opcional) Modificar según necesites
-nano .env
+# Create data directories
+mkdir -p data/raw data/processed
 ```
 
-### 4. Levantar los Servicios
+### Step 3: Configure Environment
 
 ```bash
-# Construir las imágenes personalizadas
+# Copy environment template
+cp .env.example .env
+```
+
+Edit `.env` and generate required keys:
+
+```bash
+# Generate Fernet key for Airflow
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+
+# Generate Superset secret key (requires openssl)
+openssl rand -base64 42
+```
+
+Update `.env` with the generated keys:
+
+```env
+AIRFLOW_FERNET_KEY=<your_fernet_key>
+SUPERSET_SECRET_KEY=<your_secret_key>
+```
+
+### Step 4: Build and Start Services
+
+```bash
+# Build Docker images
 docker-compose build
 
-# Iniciar todos los servicios
+# Start all services
 docker-compose up -d
+```
 
-# Ver logs en tiempo real
+This will start:
+
+-   PostgreSQL (port 5432)
+-   Airflow Webserver (port 8080)
+-   Spark Master UI (port 8081)
+-   Druid Router (port 8888)
+-   Superset (port 8088)
+-   OpenMetadata (port 8585)
+-   Elasticsearch (port 9200)
+-   ZooKeeper (port 2181)
+
+### Step 5: Access Services
+
+Wait 2-3 minutes for all services to initialize, then access:
+
+| Service      | URL                   | Username | Password |
+| ------------ | --------------------- | -------- | -------- |
+| Airflow      | http://localhost:8080 | admin    | admin    |
+| Spark Master | http://localhost:8081 | -        | -        |
+| Druid        | http://localhost:8888 | -        | -        |
+| Superset     | http://localhost:8088 | admin    | admin    |
+| OpenMetadata | http://localhost:8585 | admin    | admin    |
+
+### Step 6: Run the Pipeline
+
+1. **Access Airflow UI**: http://localhost:8080
+2. **Enable the DAG**: Find `twitter_sentiment_pipeline` and toggle it on
+3. **Trigger the DAG**: Click the play button to run manually
+4. **Monitor Progress**: Watch the DAG execution in the Graph view
+
+The pipeline will:
+
+-   ✅ Validate the input dataset
+-   ✅ Run Spark sentiment analysis (using Hugging Face Transformers)
+-   ✅ Save processed results
+-   ✅ Ingest data into Druid
+-   ✅ Log metadata to PostgreSQL
+
+### Step 7: Create Superset Dashboards
+
+Once data is in Druid, create visualizations:
+
+```bash
+# Run dashboard creation script
+docker exec -it sentiment-superset python /app/dashboards/create_dashboard.py
+```
+
+Or create manually:
+
+1. Go to http://localhost:8088
+2. Login with admin/admin
+3. Navigate to Databases → Add Database
+4. Select Druid and configure: `druid://druid-broker:8082/druid/v2/sql/`
+5. Create charts and dashboards from the `ukraine_tweets_sentiment` datasource
+
+### Step 8: Configure OpenMetadata (Optional)
+
+1. Access OpenMetadata: http://localhost:8585
+2. Login with admin/admin
+3. Add services (Settings → Services):
+    - Airflow Pipeline Service
+    - Druid Database Service
+    - Superset Dashboard Service
+    - PostgreSQL Database Service
+4. Run metadata ingestion to track data lineage
+
+## 📁 Project Structure
+
+```
+ukraine-tweets-sentiment-analysis/
+├── airflow/
+│   ├── dags/
+│   │   └── twitter_sentiment_dag.py    # Main orchestration DAG
+│   ├── Dockerfile
+│   └── requirements.txt
+├── spark/
+│   ├── sentiment_analysis.py           # Spark processing script
+│   ├── Dockerfile
+│   └── requirements.txt
+├── superset/
+│   ├── create_dashboard.py             # Dashboard automation
+│   ├── init_superset.sh               # Initialization script
+│   └── Dockerfile
+├── openmetadata/
+│   ├── config.py                       # OpenMetadata connectors
+│   └── init_openmetadata.sh
+├── scripts/
+│   └── init-databases.sh              # PostgreSQL setup
+├── data/
+│   ├── raw/                           # Input CSV files
+│   └── processed/                     # Spark output
+├── docker-compose.yml                 # Main orchestration file
+├── .env.example                       # Environment template
+├── .gitignore
+└── README.md
+```
+
+## 🔧 Pipeline Details
+
+### Spark Sentiment Analysis
+
+The `spark/sentiment_analysis.py` script:
+
+1. **Data Loading**: Reads CSV from Kaggle dataset
+2. **Text Cleaning**:
+    - Removes URLs, mentions (@user)
+    - Strips hashtags (keeps text)
+    - Removes special characters
+    - Normalizes whitespace
+3. **Sentiment Analysis**:
+    - Uses Hugging Face `distilbert-base-uncased-finetuned-sst-2-english` model
+    - Classifies tweets as POSITIVE, NEGATIVE, or NEUTRAL
+    - Processes in batches for efficiency
+4. **Output**: Saves CSV with sentiment column
+
+### Airflow DAG
+
+The pipeline DAG (`airflow/dags/twitter_sentiment_dag.py`) includes:
+
+```
+check_data → create_output_dir → create_metadata_table
+    ↓
+spark_sentiment_analysis
+    ↓
+validate_output
+    ↓
+prepare_druid_spec
+    ↓
+submit_to_druid
+    ↓
+log_metadata
+    ↓
+success_notification
+```
+
+**Schedule**: Daily (`@daily`)
+
+### Druid Ingestion
+
+Data is ingested into Druid with:
+
+-   **Datasource**: `ukraine_tweets_sentiment`
+-   **Timestamp**: `tweetcreatedts`
+-   **Dimensions**: userid, username, location, text, sentiment, hashtags
+-   **Metrics**: count, total_followers, total_retweets
+-   **Granularity**: DAY (segments), HOUR (queries)
+
+### Superset Dashboards
+
+Pre-configured visualizations:
+
+1. **Sentiment Over Time** - Line chart showing sentiment trends
+2. **Sentiment Distribution** - Pie chart of POSITIVE/NEGATIVE/NEUTRAL
+3. **Top Locations** - Bar chart of most active locations
+4. **Sentiment by Location** - Heatmap of location vs sentiment
+
+## 🛠️ Development
+
+### Rebuild Services
+
+```bash
+# Rebuild specific service
+docker-compose build spark-master
+
+# Rebuild all services
+docker-compose build
+```
+
+### View Logs
+
+```bash
+# View all logs
 docker-compose logs -f
-```
 
-⏱️ **Tiempo estimado de inicio**: 5-10 minutos (primera vez)
-
-**Nota**: El dataset ya está incluido en `spark/data/ukraine-war-tweets/`, no necesitas descargarlo.
-
-### 5. Verificar que los Servicios Estén Activos
-
-```bash
-# Verificar estado de contenedores
-docker-compose ps
-
-# Deberías ver 12 servicios running:
-# - postgres_airflow_db
-# - postgres_superset_db
-# - postgres_openmetadata_db
-# - elasticsearch
-# - airflow-webserver
-# - airflow-scheduler
-# - spark-master
-# - spark-worker
-# - druid
-# - superset
-# - openmetadata-server
-# - openmetadata-ingestion
-```
-
----
-
-## 🌐 Acceso a las Interfaces Web
-
-Una vez que todos los servicios estén levantados:
-
-| Servicio          | URL                   | Usuario | Contraseña | Puerto |
-| ----------------- | --------------------- | ------- | ---------- | ------ |
-| **Airflow**       | http://localhost:8080 | admin   | admin      | 8080   |
-| **Spark UI**      | http://localhost:8081 | -       | -          | 8081   |
-| **Superset**      | http://localhost:8088 | admin   | admin      | 8088   |
-| **Druid Console** | http://localhost:8888 | -       | -          | 8888   |
-| **OpenMetadata**  | http://localhost:8585 | admin   | admin      | 8585   |
-| **Elasticsearch** | http://localhost:9200 | -       | -          | 9200   |
-
----
-
-## 📊 Ejecutar el Pipeline
-
-### Opción 1: Desde la UI de Airflow
-
-1. Abrir Airflow en http://localhost:8080
-2. Login con `admin` / `admin`
-3. Buscar el DAG: `ukraine_sentiment_pipeline`
-4. Activar el DAG (toggle switch)
-5. Hacer clic en "Trigger DAG" (botón play ▶️)
-6. Monitorear el progreso en la vista de "Graph" o "Tree"
-
-### Opción 2: Desde la Línea de Comandos
-
-```bash
-# Ejecutar el DAG manualmente
-docker exec -it airflow-webserver airflow dags trigger ukraine_sentiment_pipeline
-
-# Ver logs del DAG
-docker exec -it airflow-webserver airflow dags list
-
-# Ver tareas del DAG
-docker exec -it airflow-webserver airflow tasks list ukraine_sentiment_pipeline
-```
-
-### Flujo de Ejecución del Pipeline
-
-```
-1. ✅ start_pipeline
-   └─▶ Inicia el workflow
-
-2. ⚡ spark_sentiment_analysis
-   └─▶ Carga datos
-   └─▶ Limpia texto
-   └─▶ Analiza sentimiento (XLM-RoBERTa)
-   └─▶ Guarda en Parquet
-
-3. 📥 load_results_to_druid
-   └─▶ Ingesta datos a Druid
-   └─▶ Crea datasource 'ukraine_sentiment_tweets'
-
-4. 🏛️ ingest_metadata_to_openmetadata
-   └─▶ Cataloga tablas de Druid
-   └─▶ Cataloga dashboards de Superset
-   └─▶ Establece linaje de datos
-
-5. ✅ end_pipeline
-   └─▶ Finaliza exitosamente
-```
-
----
-
-## 📈 Crear Visualizaciones en Superset
-
-### 1. Conectar Druid a Superset
-
-```bash
-# Acceder a Superset
-# http://localhost:8088
-
-# 1. Ir a: Settings > Database Connections > + Database
-# 2. Seleccionar: Apache Druid
-# 3. Configurar:
-#    - Display Name: Ukraine Druid
-#    - SQLAlchemy URI: druid://druid:8888/druid/v2/sql
-# 4. Test Connection
-# 5. Save
-```
-
-### 2. Crear Dataset
-
-1. Ir a: **Data > Datasets > + Dataset**
-2. Seleccionar:
-    - Database: `Ukraine Druid`
-    - Schema: `druid`
-    - Table: `ukraine_sentiment_tweets`
-3. Click en **Create Dataset and Create Chart**
-
-### 3. Crear Charts
-
-#### Chart 1: Distribución de Sentimientos (Pie Chart)
-
--   Chart Type: **Pie Chart**
--   Dimensions: `sentiment`
--   Metric: `COUNT(*)`
-
-#### Chart 2: Sentimientos por Fecha (Line Chart)
-
--   Chart Type: **Line Chart**
--   X-Axis: `processed_at` (temporal)
--   Metric: `COUNT(*)`
--   Group by: `sentiment`
-
-#### Chart 3: Promedio de Scores (Bar Chart)
-
--   Chart Type: **Bar Chart**
--   X-Axis: `sentiment`
--   Metric: `AVG(sentiment_score)`
-
-### 4. Crear Dashboard
-
-1. Ir a: **Dashboards > + Dashboard**
-2. Nombre: `Ukraine Sentiment Analysis`
-3. Agregar los charts creados
-4. Organizar y guardar
-
----
-
-## 🏛️ Explorar Gobernanza en OpenMetadata
-
-### Acceso a OpenMetadata
-
-```
-URL: http://localhost:8585
-Usuario: admin
-Contraseña: admin
-```
-
-### Funcionalidades Disponibles
-
-#### 1. **Catálogo de Datos**
-
--   Ver todas las tablas/datasources
--   Explorar esquemas y tipos de datos
--   Ver descripciones y documentación
-
-#### 2. **Linaje de Datos**
-
--   Visualizar flujo: Spark → Druid → Superset
--   Entender dependencias
--   Rastrear origen de los datos
-
-#### 3. **Calidad de Datos**
-
--   Definir tests de calidad
--   Monitorear métricas
--   Alertas sobre anomalías
-
-#### 4. **Colaboración**
-
--   Agregar descripciones
--   Etiquetar datasets
--   Asignar propietarios
--   Comentarios y discusiones
-
-### Ejecutar Ingesta de Metadatos Manualmente
-
-```bash
-# Ingestar metadatos de Druid
-docker exec -it openmetadata-ingestion \
-  metadata ingest -c /opt/airflow/openmetadata/ingestion_configs/druid_config.yml
-
-# Ingestar metadatos de Superset
-docker exec -it openmetadata-ingestion \
-  metadata ingest -c /opt/airflow/openmetadata/ingestion_configs/superset_config.yml
-```
-
----
-
-## 🔍 Monitoreo y Debugging
-
-### Ver Logs de un Servicio Específico
-
-```bash
-# Airflow
+# View specific service logs
 docker-compose logs -f airflow-webserver
-docker-compose logs -f airflow-scheduler
-
-# Spark
 docker-compose logs -f spark-master
-docker-compose logs -f spark-worker
-
-# OpenMetadata
-docker-compose logs -f openmetadata-server
-docker-compose logs -f elasticsearch
-
-# Druid
-docker-compose logs -f druid
-
-# Superset
-docker-compose logs -f superset
 ```
 
-### Acceder a un Contenedor
+### Stop Services
 
 ```bash
-# Airflow
-docker exec -it airflow-webserver bash
-
-# Spark
-docker exec -it spark-master bash
-
-# Ver archivos procesados
-docker exec -it spark-master ls -lh /opt/spark/output/ukraine_sentiment_results/
-```
-
-### Verificar Conectividad
-
-```bash
-# Desde Airflow a Spark
-docker exec -it airflow-webserver curl http://spark-master:8081
-
-# Desde Airflow a Druid
-docker exec -it airflow-webserver curl http://druid:8888/status/health
-
-# Desde Airflow a OpenMetadata
-docker exec -it airflow-webserver curl http://openmetadata-server:8585/api/v1/health
-```
-
----
-
-## 🛠️ Solución de Problemas Comunes
-
-### Problema 1: Contenedor no inicia
-
-```bash
-# Ver logs detallados
-docker-compose logs <nombre-servicio>
-
-# Reiniciar servicio específico
-docker-compose restart <nombre-servicio>
-
-# Reconstruir imagen
-docker-compose build --no-cache <nombre-servicio>
-```
-
-### Problema 2: Error de conexión entre servicios
-
-```bash
-# Verificar que todos los servicios estén en la misma red
-docker network inspect ukraine-tweets-sentiment-analysis_ukraine_sentiment_network
-
-# Reiniciar todos los servicios
-docker-compose down
-docker-compose up -d
-```
-
-### Problema 3: Falta de memoria
-
-```bash
-# Verificar uso de recursos
-docker stats
-
-# Aumentar memoria en Docker Desktop:
-# Settings > Resources > Memory > Aumentar a 8GB+
-```
-
-### Problema 4: Dataset no encontrado
-
-```bash
-# Verificar que el archivo existe
-docker exec -it spark-master ls -lh /opt/spark/data/
-
-# Copiar dataset manualmente
-docker cp ./spark/data/ukraine_tweets.csv spark-master:/opt/spark/data/
-```
-
----
-
-## 🧪 Testing
-
-### Probar el Script de Spark Localmente
-
-```bash
-# Acceder al contenedor de Spark
-docker exec -it spark-master bash
-
-# Ejecutar el script
-spark-submit \
-  --master local[*] \
-  /opt/spark/app/sentiment_analysis_job.py
-```
-
-### Verificar Salida de Spark
-
-```bash
-# Ver archivos generados
-docker exec -it spark-master ls -lh /opt/spark/output/ukraine_sentiment_results/
-
-# Leer algunos resultados
-docker exec -it spark-master \
-  spark-shell --packages org.apache.spark:spark-sql_2.12:3.5.0 \
-  -e "spark.read.parquet('/opt/spark/output/ukraine_sentiment_results/').show(10)"
-```
-
----
-
-## 📚 Tecnologías Utilizadas
-
-| Tecnología                    | Versión | Propósito                    |
-| ----------------------------- | ------- | ---------------------------- |
-| **Apache Airflow**            | 2.7.3   | Orquestación de workflows    |
-| **Apache Spark**              | 3.5.0   | Procesamiento distribuido    |
-| **Apache Druid**              | 27.0.0  | Base de datos analítica OLAP |
-| **Apache Superset**           | 3.0.1   | Visualización de datos       |
-| **OpenMetadata**              | 1.2.0   | Gobernanza y catalogación    |
-| **PostgreSQL**                | 14      | Base de datos relacional     |
-| **Elasticsearch**             | 8.10.2  | Motor de búsqueda            |
-| **Hugging Face Transformers** | 4.35.2  | Modelos de ML para NLP       |
-| **Docker**                    | 20.x+   | Containerización             |
-
-### Modelo de Machine Learning
-
--   **Nombre**: `cardiffnlp/twitter-xlm-roberta-base-sentiment`
--   **Tipo**: Transformer (XLM-RoBERTa)
--   **Características**:
-    -   ✅ Multilingüe (100+ idiomas)
-    -   ✅ Especializado en tweets
-    -   ✅ 3 clases: Negativo, Neutral, Positivo
-    -   ✅ Pre-entrenado en millones de tweets
-
----
-
-## 🔒 Seguridad
-
-### ⚠️ IMPORTANTE: Producción
-
-Este proyecto usa credenciales de desarrollo por defecto. **Antes de usar en producción**:
-
-1. ✅ Cambiar TODAS las contraseñas en `.env`
-2. ✅ Usar secretos de Docker/Kubernetes
-3. ✅ Habilitar HTTPS/TLS
-4. ✅ Configurar autenticación OAuth
-5. ✅ Implementar roles y permisos
-6. ✅ Hacer backup de bases de datos
-7. ✅ Configurar logs de auditoría
-
----
-
-## 🧹 Limpieza
-
-### Detener Todos los Servicios
-
-```bash
-# Detener sin eliminar datos
-docker-compose stop
-
-# Detener y eliminar contenedores (conserva volúmenes)
+# Stop all services
 docker-compose down
 
-# Detener y eliminar TODO (contenedores + volúmenes + redes)
+# Stop and remove volumes (clean slate)
 docker-compose down -v
 ```
 
-### Eliminar Imágenes
+### Execute Commands in Containers
 
 ```bash
-# Eliminar imágenes personalizadas
-docker rmi ukraine-tweets-sentiment-analysis-airflow-webserver
-docker rmi ukraine-tweets-sentiment-analysis-airflow-scheduler
+# Spark submit manually
+docker exec -it sentiment-spark-master spark-submit \
+  --master spark://spark-master:7077 \
+  /opt/spark-apps/sentiment_analysis.py \
+  /opt/spark-data/raw/ukraine_tweets.csv \
+  /opt/spark-data/processed/sentiment_results
 
-# Limpiar imágenes no utilizadas
-docker image prune -a
+# Access PostgreSQL
+docker exec -it sentiment-postgres psql -U airflow -d airflow
+
+# Access Airflow CLI
+docker exec -it sentiment-airflow-webserver airflow dags list
 ```
 
+## 🔍 Monitoring
+
+### Check Service Health
+
+```bash
+# Check running containers
+docker ps
+
+# Check resource usage
+docker stats
+
+# Check Airflow scheduler health
+curl http://localhost:8080/health
+
+# Check Spark master status
+curl http://localhost:8081
+```
+
+### Common Issues
+
+**Issue**: Airflow webserver won't start
+
+-   **Solution**: Check Fernet key is set in `.env`
+
+**Issue**: Spark job fails with memory error
+
+-   **Solution**: Increase Docker Desktop memory limit to 8GB+
+
+**Issue**: Druid ingestion fails
+
+-   **Solution**: Ensure data directory is mounted correctly in docker-compose
+
+**Issue**: Services can't communicate
+
+-   **Solution**: Verify all services are on `sentiment-network`
+
+## 📈 Scaling
+
+### Process Larger Datasets
+
+1. **Add Spark Workers**:
+
+```yaml
+# In docker-compose.yml, duplicate spark-worker service
+spark-worker-2:
+    # ... same config as spark-worker
+```
+
+2. **Increase Resources**:
+
+```yaml
+spark-worker:
+    environment:
+        SPARK_WORKER_MEMORY: 8G
+        SPARK_WORKER_CORES: 4
+```
+
+3. **Partition Data**:
+
+```python
+# In sentiment_analysis.py
+df.repartition(10).write.csv(output_path)
+```
+
+## 🧪 Testing
+
+### Test Spark Script Locally
+
+```bash
+docker exec -it sentiment-spark-master bash
+cd /opt/spark-apps
+python sentiment_analysis.py /opt/spark-data/raw/sample.csv /opt/spark-data/test
+```
+
+### Test Druid Query
+
+```bash
+curl -X POST 'http://localhost:8888/druid/v2/sql' \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"SELECT sentiment, COUNT(*) as count FROM ukraine_tweets_sentiment GROUP BY sentiment"}'
+```
+
+## 📚 Additional Resources
+
+-   [Apache Airflow Documentation](https://airflow.apache.org/docs/)
+-   [Apache Spark Documentation](https://spark.apache.org/docs/latest/)
+-   [Apache Druid Documentation](https://druid.apache.org/docs/latest/design/)
+-   [Apache Superset Documentation](https://superset.apache.org/docs/intro)
+-   [OpenMetadata Documentation](https://docs.open-metadata.org/)
+-   [Hugging Face Transformers](https://huggingface.co/docs/transformers/)
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Submit a pull request
+
+## 📝 License
+
+This project is licensed under the MIT License.
+
+## 🙏 Acknowledgments
+
+-   Kaggle for the Ukraine-Russia crisis Twitter dataset
+-   Hugging Face for sentiment analysis models
+-   Apache Software Foundation for open-source tools
+-   OpenMetadata community
+
+## 📧 Contact
+
+For questions or issues, please open a GitHub issue or contact the maintainers.
+
 ---
 
-## 🤝 Contribuciones
-
-Las contribuciones son bienvenidas! Por favor:
-
-1. Fork el repositorio
-2. Crea una branch (`git checkout -b feature/nueva-funcionalidad`)
-3. Commit tus cambios (`git commit -am 'Agregar nueva funcionalidad'`)
-4. Push a la branch (`git push origin feature/nueva-funcionalidad`)
-5. Abre un Pull Request
-
----
-
-## 📝 Licencia
-
-Este proyecto está bajo la Licencia MIT. Ver archivo `LICENSE` para más detalles.
-
----
-
-## 📞 Contacto
-
-**Gabriel Fallas**
-
--   GitHub: [@GabrielFallas](https://github.com/GabrielFallas)
--   Email: gabriel@example.com
-
----
-
-## 🎓 Referencias y Recursos
-
--   [Apache Airflow Docs](https://airflow.apache.org/docs/)
--   [Apache Spark Docs](https://spark.apache.org/docs/latest/)
--   [Apache Druid Docs](https://druid.apache.org/docs/latest/)
--   [Apache Superset Docs](https://superset.apache.org/docs/)
--   [OpenMetadata Docs](https://docs.open-metadata.org/)
--   [Hugging Face Models](https://huggingface.co/models)
--   [XLM-RoBERTa Model](https://huggingface.co/cardiffnlp/twitter-xlm-roberta-base-sentiment)
-
----
-
-## 📊 Estado del Proyecto
-
-![Status](https://img.shields.io/badge/status-active-success.svg)
-![Docker](https://img.shields.io/badge/docker-ready-blue.svg)
-![License](https://img.shields.io/badge/license-MIT-green.svg)
-
----
-
-**🇺🇦 Construido con ❤️ para análisis de sentimiento sobre Ucrania**
+**Note**: This pipeline processes real Twitter data about a sensitive geopolitical event. Please use responsibly and consider ethical implications when analyzing and sharing sentiment results.
