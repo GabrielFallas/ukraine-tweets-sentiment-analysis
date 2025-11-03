@@ -205,6 +205,36 @@ services:
         command:
             - broker
 
+    # Apache Druid - MiddleManager (required for batch ingestion)
+    druid-middlemanager:
+        image: apache/druid:28.0.1
+        container_name: sentiment-druid-middlemanager
+        depends_on:
+            - druid-coordinator
+        environment:
+            - DRUID_XMX=1g
+            - DRUID_XMS=1g
+            - DRUID_MAXNEWSIZE=250m
+            - DRUID_NEWSIZE=250m
+            - druid_extensions_loadList=["druid-histogram", "druid-datasketches", "druid-lookups-cached-global", "postgresql-metadata-storage"]
+            - druid_metadata_storage_type=postgresql
+            - druid_metadata_storage_connector_connectURI=jdbc:postgresql://postgres:5432/druid
+            - druid_metadata_storage_connector_user=airflow
+            - druid_metadata_storage_connector_password=airflow
+            - druid_zk_service_host=druid-zookeeper
+            - druid_indexer_task_baseTaskDir=/opt/druid/var/druid/task
+            - druid_indexer_fork_property_druid_processing_buffer_sizeBytes=134217728
+        ports:
+            - "8091:8091"
+            - "8100-8105:8100-8105"
+        volumes:
+            - druid-middlemanager-data:/opt/druid/var
+            - ./data:/opt/druid/data
+        networks:
+            - sentiment-network
+        command:
+            - middleManager
+
     # Apache Druid - Historical
     druid-historical:
         image: apache/druid:28.0.1
@@ -222,6 +252,7 @@ services:
             - druid_metadata_storage_connector_user=airflow
             - druid_metadata_storage_connector_password=airflow
             - druid_zk_service_host=druid-zookeeper
+            - druid_segmentCache_locations=[{"path":"/opt/druid/var/druid/segment-cache","maxSize":10737418240}]
         ports:
             - "8084:8083"
         volumes:
@@ -383,6 +414,7 @@ volumes:
     airflow-data:
     druid-coordinator-data:
     druid-broker-data:
+    druid-middlemanager-data:
     druid-historical-data:
     druid-router-data:
     zookeeper-data:
