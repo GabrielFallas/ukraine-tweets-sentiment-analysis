@@ -117,7 +117,7 @@ class TweetSentimentAnalyzer:
         return results
 
     def load_data(self):
-        """Load CSV data from Kaggle dataset with sampling"""
+        """Load CSV data from pre-sampled 70k dataset"""
         logger.info(f"Loading data from: {self.input_path}")
 
         try:
@@ -132,24 +132,18 @@ class TweetSentimentAnalyzer:
             total_count = df.count()
             logger.info(f"Total rows in dataset: {total_count}")
 
-            # Sample 0.1% of the data for processing (~70,000 tweets)
-            # This ensures completion within timeout while maintaining statistical significance
-            sample_fraction = 0.001
-            df_sampled = df.sample(withReplacement=False,
-                                   fraction=sample_fraction, seed=42)
-
-            sampled_count = df_sampled.count()
+            # Dataset is already pre-sampled to 70,000 rows, so no need to sample again
             logger.info(
-                f"Sampled {sampled_count} rows ({sample_fraction*100}% of total)")
-            logger.info(f"Schema: {df_sampled.columns}")
+                "Using full pre-sampled dataset (no additional sampling)")
+            logger.info(f"Schema: {df.columns}")
 
             # Repartition to enable parallel processing across multiple executors
             # Use 4 partitions to parallelize the sentiment analysis
-            df_sampled = df_sampled.repartition(4)
+            df = df.repartition(4)
             logger.info(
                 f"Repartitioned data into 4 partitions for parallel processing")
 
-            return df_sampled
+            return df
 
         except Exception as e:
             logger.error(f"Error loading data: {str(e)}")
@@ -324,14 +318,17 @@ class TweetSentimentAnalyzer:
 
         df_final = df.select(*existing_columns)
 
-        # Save as CSV with header
-        df_final.coalesce(1) \
-            .write \
-            .mode("overwrite") \
-            .option("header", "true") \
-            .csv(self.output_path)
+        # Convert to pandas and save directly (works better for small datasets)
+        logger.info("Converting Spark DataFrame to Pandas...")
+        pandas_df = df_final.toPandas()
 
-        logger.info("Results saved successfully")
+        # Save using pandas (avoids Spark permission issues)
+        import os
+        output_file = os.path.join(self.output_path, 'sentiment_results.csv')
+        pandas_df.to_csv(output_file, index=False)
+
+        logger.info(f"Results saved to: {output_file}")
+        logger.info(f"Total rows saved: {len(pandas_df)}")
 
         # Print summary statistics
         self.print_summary(df_final)
@@ -360,10 +357,17 @@ class TweetSentimentAnalyzer:
             logger.info("=" * 60)
 
             # Clean output directory if it exists to avoid file conflicts
-            import subprocess
+            import shutil
+            import os
             try:
-                subprocess.run(['rm', '-rf', self.output_path], check=False)
-                logger.info(f"Cleaned output directory: {self.output_path}")
+                if os.path.exists(self.output_path):
+                    shutil.rmtree(self.output_path, ignore_errors=True)
+                    logger.info(
+                        f"Cleaned output directory: {self.output_path}")
+                # Recreate the directory
+                os.makedirs(self.output_path, exist_ok=True)
+                logger.info(
+                    f"Created fresh output directory: {self.output_path}")
             except Exception as clean_error:
                 logger.warning(
                     f"Could not clean output directory: {clean_error}")

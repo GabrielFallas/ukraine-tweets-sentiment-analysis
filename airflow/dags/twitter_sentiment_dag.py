@@ -32,7 +32,7 @@ default_args = {
 
 # Paths
 DATA_DIR = '/opt/airflow/data'
-RAW_DATA_PATH = f'{DATA_DIR}/raw/ukraine_tweets.csv'
+RAW_DATA_PATH = f'{DATA_DIR}/raw/ukraine_tweets_sample_100.csv'
 PROCESSED_DATA_PATH = f'{DATA_DIR}/processed/sentiment_results'
 SPARK_APP_PATH = '/opt/airflow/spark/sentiment_analysis.py'
 
@@ -272,35 +272,23 @@ with DAG(
         """,
     )
 
-    # Task 4: Run Spark sentiment analysis job (using mock data for demo)
-    # Note: For production, uncomment the SparkSubmitOperator and ensure Spark cluster is healthy
-    spark_job_task = BashOperator(
+    # Task 4: Run Spark sentiment analysis job with 0.1% sample (~70K tweets)
+    spark_job_task = SparkSubmitOperator(
         task_id='run_spark_sentiment_analysis',
-        bash_command=f'''
-        echo "Using mock sentiment data for pipeline demonstration"
-        echo "Mock data location: {PROCESSED_DATA_PATH}"
-        ls -lh {PROCESSED_DATA_PATH}
-        echo "Mock data ready for Druid ingestion"
-        ''',
+        application=SPARK_APP_PATH,
+        name='ukraine-twitter-sentiment-analysis',
+        conn_id='spark_default',
+        verbose=True,
+        application_args=[RAW_DATA_PATH, PROCESSED_DATA_PATH],
+        conf={
+            'spark.driver.memory': '2g',
+            'spark.executor.memory': '3g',
+            'spark.executor.cores': '2',
+            'spark.memory.fraction': '0.8',
+            'spark.memory.storageFraction': '0.3',
+        },
+        execution_timeout=timedelta(hours=4),
     )
-
-    # For production use:
-    # spark_job_task = SparkSubmitOperator(
-    #     task_id='run_spark_sentiment_analysis',
-    #     application=SPARK_APP_PATH,
-    #     name='ukraine-twitter-sentiment-analysis',
-    #     conn_id='spark_default',
-    #     verbose=True,
-    #     application_args=[RAW_DATA_PATH, PROCESSED_DATA_PATH],
-    #     conf={
-    #         'spark.driver.memory': '2g',
-    #         'spark.executor.memory': '3g',
-    #         'spark.executor.cores': '2',
-    #         'spark.memory.fraction': '0.8',
-    #         'spark.memory.storageFraction': '0.3',
-    #     },
-    #     execution_timeout=timedelta(hours=4),
-    # )
 
     # Task 5: Validate Spark output
     validate_output_task = PythonOperator(
