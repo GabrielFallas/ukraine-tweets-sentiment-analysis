@@ -1,120 +1,64 @@
 {
-	"type": "index_parallel",
-	"spec": {
-		"ioConfig": {
-			"type": "index_parallel",
-			"inputSource": {
-				"type": "local",
-				"baseDir": "/opt/druid/data/processed/sentiment_results",
-				"filter": "sentiment_results.csv"
-			},
-			"inputFormat": {
-				"type": "csv",
-				"findColumnsFromHeader": true,
-				"skipHeaderRows": 0,
-				"columns": [
-					"userid",
-					"username",
-					"location",
-					"followers",
-					"following",
-					"tweetid",
-					"tweetcreatedts",
-					"text",
-					"cleaned_text",
-					"hashtags",
-					"retweetcount",
-					"sentiment"
-				]
-			}
-		},
-		"tuningConfig": {
-			"type": "index_parallel",
-			"maxRowsInMemory": 25000,
-			"maxNumConcurrentSubTasks": 1,
-			"partitionsSpec": {
-				"type": "dynamic",
-				"maxRowsPerSegment": 5000000
-			},
-			"forceGuaranteedRollup": false
-		},
-		"dataSchema": {
-			"dataSource": "ukraine_tweets_sentiment",
-			"timestampSpec": {
-				"column": "tweetcreatedts",
-				"format": "yyyy-MM-dd HH:mm:ss",
-				"missingValue": "2022-01-01T00:00:00Z"
-			},
-			"dimensionsSpec": {
-				"dimensions": [
-					{
-						"type": "string",
-						"name": "userid"
-					},
-					{
-						"type": "string",
-						"name": "username"
-					},
-					{
-						"type": "string",
-						"name": "location"
-					},
-					{
-						"type": "string",
-						"name": "text"
-					},
-					{
-						"type": "string",
-						"name": "cleaned_text"
-					},
-					{
-						"type": "string",
-						"name": "hashtags"
-					},
-					{
-						"type": "string",
-						"name": "sentiment"
-					},
-					{
-						"type": "long",
-						"name": "followers"
-					},
-					{
-						"type": "long",
-						"name": "following"
-					},
-					{
-						"type": "long",
-						"name": "tweetid"
-					},
-					{
-						"type": "long",
-						"name": "retweetcount"
-					}
-				]
-			},
-			"metricsSpec": [
-				{
-					"type": "count",
-					"name": "count"
-				},
-				{
-					"type": "longSum",
-					"name": "total_followers",
-					"fieldName": "followers"
-				},
-				{
-					"type": "longSum",
-					"name": "total_retweets",
-					"fieldName": "retweetcount"
-				}
-			],
-			"granularitySpec": {
-				"type": "uniform",
-				"segmentGranularity": "DAY",
-				"queryGranularity": "HOUR",
-				"rollup": false
-			}
-		}
-	}
+  "type": "index_parallel",
+  "spec": {
+    "ioConfig": {
+      "type": "index_parallel",
+      "inputSource": {
+        "type": "local",
+        "baseDir": "/opt/druid/data/processed/sentiment_results/",
+        "filter": "*.csv"
+      },
+      "inputFormat": {
+        "type": "csv",
+        "findColumnsFromHeader": true,
+        "skipHeaderRows": 0
+      }
+    },
+    "tuningConfig": {
+      "type": "index_parallel",
+      "partitionsSpec": {
+        "type": "dynamic"
+      }
+    },
+    "dataSchema": {
+      "dataSource": "ukraine_tweets_sentiment",
+      "timestampSpec": {
+        "column": "tweetcreatedts",
+        "format": "auto"
+      },
+      "dimensionsSpec": {
+        "dimensions": [
+          "userid",
+          "username",
+          "location",
+          "text",
+          "cleaned_text",
+          "hashtags",
+          "sentiment"
+        ]
+      },
+      "metricsSpec": [
+        {
+          "type": "count",
+          "name": "count"
+        },
+        {
+          "type": "longSum",
+          "name": "total_followers",
+          "fieldName": "followers"
+        },
+        {
+          "type": "longSum",
+          "name": "total_retweets",
+          "fieldName": "retweetcount"
+        }
+      ],
+      "granularitySpec": {
+        "type": "uniform",
+        "segmentGranularity": "DAY",
+        "queryGranularity": "HOUR",
+        "rollup": false
+      }
+    }
+  }
 }
