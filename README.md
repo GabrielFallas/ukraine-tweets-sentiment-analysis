@@ -1,116 +1,224 @@
-# Ukraine Tweets Sentiment Analysis Pipeline
+# 🇺🇦 Ukraine Tweets Sentiment Analysis Pipeline
 
-A complete, containerized data pipeline for sentiment analysis of the Ukraine-Russia crisis Twitter dataset using modern data engineering tools.
+A complete end-to-end data pipeline for sentiment analysis of Ukraine-related tweets using Apache Airflow, Spark, PostgreSQL, Druid, and Superset.
 
-## 🏗️ Architecture
+## 📁 Project Structure
 
-This project implements a production-grade data pipeline with the following components:
-
--   **Docker** - Containerization platform
--   **Apache Airflow** - Workflow orchestration
--   **Apache Spark** - Distributed data processing and sentiment analysis
--   **PostgreSQL** - Metadata and results storage
--   **Apache Druid** - Fast OLAP analytics
--   **Apache Superset** - Data visualization and dashboards
--   **OpenMetadata** - Data governance and lineage tracking
-
-## 📊 Dataset
-
-**Ukraine-Russia Crisis Twitter Dataset (1.2M rows)**
-
--   Source: [Kaggle Dataset](https://www.kaggle.com/datasets/bwandowando/ukraine-russian-crisis-twitter-dataset-1-2-m-rows)
--   Contains tweets related to the Ukraine-Russia crisis
--   Fields: userid, username, location, tweet text, hashtags, timestamps, retweet counts, etc.
+```
+ukraine-tweets-sentiment-analysis/
+├── 📂 airflow/                    # Airflow configuration and DAGs
+│   ├── dags/                      # DAG definitions
+│   ├── logs/                      # Airflow execution logs
+│   ├── plugins/                   # Custom Airflow plugins
+│   ├── Dockerfile                 # Airflow container image
+│   └── requirements.txt           # Python dependencies
+│
+├── 📂 spark/                      # Spark job definitions
+│   ├── sentiment_analysis.py     # Main sentiment analysis job
+│   ├── Dockerfile                 # Spark container image
+│   └── requirements.txt           # Spark dependencies
+│
+├── 📂 superset/                   # Apache Superset configuration
+│   ├── dashboards/                # Dashboard definitions
+│   ├── create_dashboard.py       # Dashboard setup script
+│   ├── init_superset.sh          # Initialization script
+│   └── Dockerfile                 # Superset container image
+│
+├── 📂 openmetadata/               # OpenMetadata integration
+│   ├── config.py                  # Configuration
+│   └── init_openmetadata.sh      # Setup script
+│
+├── 📂 scripts/                    # Setup and utility scripts
+│   ├── init-databases.sh         # Database initialization
+│   ├── setup_airflow_connections.sh   # Airflow connections
+│   ├── setup_airflow_connections.bat  # Windows setup
+│   └── query_druid.sh            # Druid query utility
+│
+├── 📂 data/                       # Data storage
+│   ├── raw/                       # Raw tweet data
+│   │   ├── ukraine_tweets.csv    # Full dataset
+│   │   └── ukraine_tweets_sample_100.csv  # Test sample
+│   ├── processed/                 # Processed results
+│   │   └── sentiment_results/    # Analysis output
+│   └── druid_ingestion_spec.json # Druid ingestion config
+│
+├── 📂 tools/                      # Utility tools
+│   ├── 📂 data_preparation/       # Data sampling and preparation
+│   │   ├── create_sample_100.py   # Create 100-row sample
+│   │   ├── create_sample_dataset.py # Create larger samples
+│   │   ├── create_mock_data.py    # Generate mock data
+│   │   └── download_dataset.py    # Download from source
+│   │
+│   ├── 📂 database_loaders/       # Database loading scripts
+│   │   ├── load_to_postgres_sqlalchemy.py  # ✅ Main loader (recommended)
+│   │   ├── load_to_postgres_direct.py      # Direct psycopg2 method
+│   │   ├── load_to_postgres_fixed.py       # Alternative method
+│   │   ├── load_to_postgres_simple.py      # Simple COPY method
+│   │   └── load_results_to_postgres.py     # Legacy loader
+│   │
+│   └── 📂 diagnostics/            # Monitoring and debugging
+│       ├── verify_postgres.py     # Check PostgreSQL data
+│       ├── check_druid_data.py    # Check Druid data
+│       ├── diagnose_druid_connection.py  # Druid diagnostics
+│       ├── view_results.py        # View analysis results
+│       └── monitor_pipeline.py    # Pipeline monitoring
+│
+├── 📂 docs/                       # Documentation
+│   ├── ARCHITECTURE.md            # System architecture
+│   ├── PROJECT_STRUCTURE.md       # Project organization
+│   ├── QUICKSTART.md             # Quick start guide
+│   ├── TROUBLESHOOTING.md        # Common issues and fixes
+│   ├── SUPERSET_CONNECTION_GUIDE.md  # Superset setup (⭐ Start here!)
+│   ├── SUPERSET_SETUP.md         # Detailed Superset guide
+│   ├── CONNECT_SUPERSET_TO_DRUID.md  # Druid connection
+│   ├── VISUAL_OVERVIEW.md        # Visual diagrams
+│   ├── INDEX.md                  # Documentation index
+│   ├── SUMMARY.md                # Project summary
+│   └── CHECKLIST.md              # Implementation checklist
+│
+├── 📂 config/                     # Configuration files
+│   └── generate_keys.py          # Generate encryption keys
+│
+├── 📄 docker-compose.yml          # Docker services definition
+├── 📄 Makefile                    # Build and run commands
+├── 📄 .env.example                # Example environment config
+├── 📄 setup.sh                    # Linux/Mac setup script
+├── 📄 SETUP.bat                   # Windows setup script
+└── 📄 README.md                   # This file
+```
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 
 -   Docker Desktop (Windows/Mac) or Docker Engine (Linux)
--   At least 16GB RAM
--   20GB free disk space
--   Python 3.11+ (for dataset download)
+-   8GB+ RAM available for Docker
+-   10GB+ disk space
+-   Python 3.11+ (optional, for data preparation)
 
-### Step 1: Clone Repository
+### Step 1: Clone and Setup
 
 ```bash
+# Clone the repository
 git clone https://github.com/yourusername/ukraine-tweets-sentiment-analysis.git
 cd ukraine-tweets-sentiment-analysis
-```
 
-### Step 2: Download Dataset
-
-1. Go to [Kaggle Dataset Page](https://www.kaggle.com/datasets/bwandowando/ukraine-russian-crisis-twitter-dataset-1-2-m-rows)
-2. Download the CSV file
-3. Place it in `data/raw/ukraine_tweets.csv`
-
-```bash
-# Create data directories
-mkdir -p data/raw data/processed
-```
-
-### Step 3: Configure Environment
-
-```bash
 # Copy environment template
 cp .env.example .env
 ```
 
-Edit `.env` and generate required keys:
+### Step 2: Download Dataset
+
+**Option A: Full Dataset (1.2M rows, 44GB)**
+
+1. Go to [Kaggle Dataset](https://www.kaggle.com/datasets/bwandowando/ukraine-russian-crisis-twitter-dataset-1-2-m-rows)
+2. Download CSV and place in `data/raw/ukraine_tweets.csv`
+
+**Option B: Quick Test (100 rows) - Recommended for first run**
 
 ```bash
-# Generate Fernet key for Airflow
-python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-
-# Generate Superset secret key (requires openssl)
-openssl rand -base64 42
+python tools/data_preparation/create_sample_100.py
 ```
 
-Update `.env` with the generated keys:
+### Step 3: Start Services
 
-```env
-AIRFLOW_FERNET_KEY=<your_fernet_key>
-SUPERSET_SECRET_KEY=<your_secret_key>
-```
-
-### Step 4: Build and Start Services
+**Linux/Mac:**
 
 ```bash
-# Build Docker images
-docker-compose build
-
-# Start all services
+./setup.sh
 docker-compose up -d
 ```
 
-This will start:
+**Windows:**
 
--   PostgreSQL (port 5432)
--   Airflow Webserver (port 8080)
--   Spark Master UI (port 8081)
--   Druid Router (port 8888)
--   Superset (port 8088)
--   OpenMetadata (port 8585)
--   Elasticsearch (port 9200)
--   ZooKeeper (port 2181)
+```powershell
+.\SETUP.bat
+docker-compose up -d
+```
 
-### Step 5: Access Services
+Wait 2-3 minutes for all services to initialize.
 
-Wait 2-3 minutes for all services to initialize, then access:
-
-| Service      | URL                   | Username | Password |
-| ------------ | --------------------- | -------- | -------- |
-| Airflow      | http://localhost:8080 | admin    | admin    |
-| Spark Master | http://localhost:8081 | -        | -        |
-| Druid        | http://localhost:8888 | -        | -        |
-| Superset     | http://localhost:8088 | admin    | admin    |
-| OpenMetadata | http://localhost:8585 | admin    | admin    |
-
-### Step 6: Run the Pipeline
+### Step 4: Run the Pipeline
 
 1. **Access Airflow UI**: http://localhost:8080
+
+    - Username: `airflow`, Password: `airflow`
+
 2. **Enable the DAG**: Find `twitter_sentiment_pipeline` and toggle it on
-3. **Trigger the DAG**: Click the play button to run manually
+
+3. **Trigger the DAG**: Click the play button (▶️) to run manually
+
+4. **Monitor progress**: Pipeline completes in ~30 seconds for 100 rows
+
+### Step 5: Load Results to Database
+
+```bash
+# Load results to PostgreSQL
+python tools/database_loaders/load_to_postgres_sqlalchemy.py
+
+# Verify data loaded successfully
+python tools/diagnostics/verify_postgres.py
+```
+
+### Step 6: Visualize in Superset
+
+1. **Open Superset**: http://localhost:8088
+
+    - Username: `admin`, Password: `admin`
+
+2. **Follow the detailed guide**: [`docs/SUPERSET_CONNECTION_GUIDE.md`](docs/SUPERSET_CONNECTION_GUIDE.md)
+
+3. **Quick setup**:
+
+    - Go to: Settings → Database Connections → + Database
+    - Select: PostgreSQL
+    - URI: `postgresql://airflow:airflow@sentiment-postgres:5432/airflow`
+    - Test → Connect
+
+4. Create dataset from table: `ukraine_tweets_sentiment` and build dashboards!
+
+## 🔧 Service URLs
+
+| Service           | URL                   | Credentials       |
+| ----------------- | --------------------- | ----------------- |
+| **Airflow**       | http://localhost:8080 | airflow / airflow |
+| **Spark Master**  | http://localhost:8081 | -                 |
+| **Druid Console** | http://localhost:8888 | -                 |
+| **Superset**      | http://localhost:8088 | admin / admin     |
+| **PostgreSQL**    | localhost:5432        | airflow / airflow |
+
+## 📊 Pipeline Overview
+
+```
+┌─────────────┐     ┌──────────────┐     ┌─────────────┐     ┌──────────────┐
+│   Raw CSV   │────▶│   Airflow    │────▶│    Spark    │────▶│  PostgreSQL  │
+│  (Tweets)   │     │ Orchestrator │     │  Sentiment  │     │   (Results)  │
+└─────────────┘     └──────────────┘     │  Analysis   │     └──────────────┘
+                                          └─────────────┘             │
+                                                                      ▼
+                                                              ┌──────────────┐
+                                                              │   Superset   │
+                                                              │ (Dashboards) │
+                                                              └──────────────┘
+```
+
+### Pipeline Steps:
+
+1. **Data Ingestion**: Load raw tweet CSV
+2. **Preprocessing**: Clean text, remove special characters
+3. **Sentiment Analysis**: Spark + DistilBERT model (Hugging Face)
+4. **Storage**: Save to PostgreSQL
+5. **Visualization**: Create dashboards in Superset
+
+### Tech Stack:
+
+-   **Orchestration**: Apache Airflow 2.x
+-   **Processing**: Apache Spark 3.x (Standalone cluster)
+-   **ML Model**: DistilBERT (transformers library)
+-   **Storage**: PostgreSQL 14, Apache Druid 28
+-   **Visualization**: Apache Superset 3.x
+-   **Containerization**: Docker Compose
+
 4. **Monitor Progress**: Watch the DAG execution in the Graph view
 
 The pipeline will:
