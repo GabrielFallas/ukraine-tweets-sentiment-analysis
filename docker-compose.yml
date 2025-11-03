@@ -114,7 +114,7 @@ services:
             - "7077:7077"
         volumes:
             - ./spark:/opt/spark-apps
-            - ./data:/opt/spark-data
+            - ./data:/opt/airflow/data
         networks:
             - sentiment-network
         command: ["/opt/spark/sbin/start-master.sh", "-h", "0.0.0.0"]
@@ -136,13 +136,13 @@ services:
         environment:
             - SPARK_MODE=worker
             - SPARK_MASTER=spark://spark-master:7077
-            - SPARK_WORKER_MEMORY=4G
+            - SPARK_WORKER_MEMORY=12G
             - SPARK_WORKER_CORES=2
             - SPARK_NO_DAEMONIZE=true
             - SPARK_USER=root
         volumes:
             - ./spark:/opt/spark-apps
-            - ./data:/opt/spark-data
+            - ./data:/opt/airflow/data
         networks:
             - sentiment-network
         command:

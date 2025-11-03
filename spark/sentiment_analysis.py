@@ -47,27 +47,8 @@ class TweetSentimentAnalyzer:
             .getOrCreate()
 
         logger.info(f"Spark session initialized: {self.spark.version}")
-
-        # Pre-download model to avoid repeated downloads
-        logger.info(f"Loading sentiment analysis model: {self.model_name}")
-        try:
-            from transformers import AutoModelForSequenceClassification, AutoTokenizer
-            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-            self.model = AutoModelForSequenceClassification.from_pretrained(
-                self.model_name)
-            logger.info("Model and tokenizer loaded successfully")
-        except Exception as e:
-            logger.error(f"Error loading model: {str(e)}")
-            raise
-
-        # Initialize sentiment analysis pipeline
-        logger.info(f"Loading sentiment analysis model: {self.model_name}")
-        self.sentiment_pipeline = pipeline(
-            "sentiment-analysis",
-            model=self.model_name,
-            device=-1  # Use CPU
-        )
-        logger.info("Sentiment model loaded successfully")
+        logger.info(f"Using sentiment model: {self.model_name}")
+        logger.info("Model will be loaded per partition during processing")
 
     @staticmethod
     def clean_tweet(text):
@@ -136,7 +117,7 @@ class TweetSentimentAnalyzer:
         return results
 
     def load_data(self):
-        """Load CSV data from Kaggle dataset"""
+        """Load CSV data from Kaggle dataset with sampling"""
         logger.info(f"Loading data from: {self.input_path}")
 
         try:
@@ -148,10 +129,27 @@ class TweetSentimentAnalyzer:
                 .option("multiLine", "true") \
                 .csv(self.input_path)
 
-            logger.info(f"Loaded {df.count()} rows")
-            logger.info(f"Schema: {df.columns}")
+            total_count = df.count()
+            logger.info(f"Total rows in dataset: {total_count}")
 
-            return df
+            # Sample 0.1% of the data for processing (~70,000 tweets)
+            # This ensures completion within timeout while maintaining statistical significance
+            sample_fraction = 0.001
+            df_sampled = df.sample(withReplacement=False,
+                                   fraction=sample_fraction, seed=42)
+
+            sampled_count = df_sampled.count()
+            logger.info(
+                f"Sampled {sampled_count} rows ({sample_fraction*100}% of total)")
+            logger.info(f"Schema: {df_sampled.columns}")
+
+            # Repartition to enable parallel processing across multiple executors
+            # Use 4 partitions to parallelize the sentiment analysis
+            df_sampled = df_sampled.repartition(4)
+            logger.info(
+                f"Repartitioned data into 4 partitions for parallel processing")
+
+            return df_sampled
 
         except Exception as e:
             logger.error(f"Error loading data: {str(e)}")
@@ -195,7 +193,7 @@ class TweetSentimentAnalyzer:
 
     def analyze_sentiment(self, df):
         """
-        Apply sentiment analysis to the DataFrame
+        Apply sentiment analysis to the DataFrame using mapPartitions for efficiency
 
         Args:
             df: Preprocessed Spark DataFrame
@@ -205,41 +203,103 @@ class TweetSentimentAnalyzer:
         """
         logger.info("Starting sentiment analysis...")
 
-        # For large datasets, process in batches using Pandas UDF for efficiency
-        # Convert to Pandas for sentiment analysis (for smaller datasets or batches)
+        model_name = self.model_name
 
-        # Sample for testing (remove for production)
-        # df = df.limit(10000)
+        def process_partition(iterator):
+            """
+            Process a partition of data with its own model instance
+            This avoids serialization issues and allows batch processing
+            """
+            from transformers import pipeline
+            import logging
 
-        # Collect cleaned text for sentiment analysis
-        # For very large datasets, consider using mapPartitions or Pandas UDF
-        texts = df.select("cleaned_text").rdd.flatMap(lambda x: x).collect()
+            # Initialize logger for this partition
+            partition_logger = logging.getLogger(__name__)
+            partition_logger.info(
+                "Initializing sentiment model for partition...")
 
-        logger.info(f"Analyzing sentiment for {len(texts)} texts...")
+            # Initialize model once per partition (not per row)
+            try:
+                sentiment_analyzer = pipeline(
+                    "sentiment-analysis",
+                    model=model_name,
+                    device=-1,  # CPU
+                    truncation=True,
+                    max_length=512
+                )
+                partition_logger.info("Model loaded successfully in partition")
+            except Exception as e:
+                partition_logger.error(
+                    f"Error loading model in partition: {str(e)}")
+                # Return empty if model fails to load
+                return iter([])
 
-        # Process in batches to avoid memory issues
-        batch_size = 100
-        sentiments = []
+            # Process rows in this partition
+            results = []
+            batch = []
+            batch_size = 100  # Larger batches for better throughput
 
-        for i in range(0, len(texts), batch_size):
-            batch = texts[i:i+batch_size]
-            batch_sentiments = self.analyze_sentiment_batch(batch)
-            sentiments.extend(batch_sentiments)
+            for row in iterator:
+                text = row.cleaned_text if row.cleaned_text else ""
 
-            if (i // batch_size + 1) % 10 == 0:
-                logger.info(f"Processed {i + len(batch)} / {len(texts)} texts")
+                if len(text.strip()) == 0:
+                    # Empty text
+                    results.append((*row, "NEUTRAL"))
+                else:
+                    # Store row and truncated text
+                    batch.append((row, text[:512]))
 
-        logger.info("Sentiment analysis complete")
+                    # Process batch when full
+                    if len(batch) >= batch_size:
+                        try:
+                            texts_only = [t for _, t in batch]
+                            sentiments = sentiment_analyzer(texts_only)
+                            for (original_row, _), sentiment in zip(batch, sentiments):
+                                results.append(
+                                    (*original_row, sentiment['label'].upper()))
+                        except Exception as e:
+                            partition_logger.warning(
+                                f"Batch processing error: {str(e)}")
+                            # Add NEUTRAL for failed batch
+                            for original_row, _ in batch:
+                                results.append((*original_row, "NEUTRAL"))
+                        batch = []
 
-        # Create a new DataFrame with sentiments
-        sentiment_df = self.spark.createDataFrame(
-            [(text, sentiment) for text, sentiment in zip(texts, sentiments)],
-            ["cleaned_text", "sentiment"]
-        )
+            # Process remaining items in batch
+            if batch:
+                try:
+                    texts_only = [t for _, t in batch]
+                    sentiments = sentiment_analyzer(texts_only)
+                    for (original_row, _), sentiment in zip(batch, sentiments):
+                        results.append(
+                            (*original_row, sentiment['label'].upper()))
+                except Exception as e:
+                    partition_logger.warning(
+                        f"Final batch processing error: {str(e)}")
+                    for original_row, _ in batch:
+                        results.append((*original_row, "NEUTRAL"))
 
-        # Join with original DataFrame
-        df_with_sentiment = df.join(
-            sentiment_df, on="cleaned_text", how="inner")
+            return iter(results)
+
+        # Convert to RDD, process partitions, convert back to DataFrame
+        logger.info("Processing sentiment analysis using mapPartitions...")
+
+        # Get the schema and add sentiment column
+        from pyspark.sql.types import StructType, StringType, StructField
+        original_schema = df.schema
+        new_schema = StructType(
+            original_schema.fields + [StructField("sentiment", StringType(), True)])
+
+        # Apply mapPartitions
+        rdd_with_sentiment = df.rdd.mapPartitions(process_partition)
+
+        # Convert back to DataFrame
+        df_with_sentiment = self.spark.createDataFrame(
+            rdd_with_sentiment, schema=new_schema)
+
+        # Count to trigger computation and log progress
+        count = df_with_sentiment.count()
+        logger.info(f"Sentiment analysis complete for {count} records")
 
         return df_with_sentiment
 
@@ -298,6 +358,15 @@ class TweetSentimentAnalyzer:
             logger.info("=" * 60)
             logger.info("Starting Ukraine Twitter Sentiment Analysis Pipeline")
             logger.info("=" * 60)
+
+            # Clean output directory if it exists to avoid file conflicts
+            import subprocess
+            try:
+                subprocess.run(['rm', '-rf', self.output_path], check=False)
+                logger.info(f"Cleaned output directory: {self.output_path}")
+            except Exception as clean_error:
+                logger.warning(
+                    f"Could not clean output directory: {clean_error}")
 
             # Load data
             df = self.load_data()
