@@ -612,8 +612,27 @@ def create_superset_dashboard(**context):
         raise ValueError("Chart creation failed")
 
     # Create dashboard
-    logger.info("Creating dashboard...")
-    dashboard_url = f"{superset_url}/api/v1/dashboard/"
+    logger.info("Creating/updating dashboard...")
+    dashboard_api_url = f"{superset_url}/api/v1/dashboard/"
+    dashboard_slug = "ukraine-tweets-sentiment"
+
+    # Check if dashboard already exists
+    logger.info("Checking for existing dashboard...")
+    try:
+        response = session.get(dashboard_api_url, headers=headers, timeout=30)
+        response.raise_for_status()
+        dashboards = response.json().get("result", [])
+
+        existing_dashboard = None
+        for dash in dashboards:
+            if dash.get("slug") == dashboard_slug:
+                existing_dashboard = dash
+                logger.info(
+                    f"✓ Found existing dashboard with ID: {dash.get('id')}")
+                break
+    except Exception as e:
+        logger.warning(f"Could not check for existing dashboard: {str(e)}")
+        existing_dashboard = None
 
     # Create position metadata for charts
     position_json = {}
@@ -633,34 +652,71 @@ def create_superset_dashboard(**context):
 
     dashboard_config = {
         "dashboard_title": "Ukraine Tweets Sentiment Analysis",
-        "slug": "ukraine-tweets-sentiment",
+        "slug": dashboard_slug,
         "position_json": json.dumps(position_json),
         "published": True
     }
 
     try:
-        response = session.post(
-            dashboard_url, headers=headers, json=dashboard_config, timeout=30)
-        if response.status_code == 201:
-            dashboard_id = response.json().get("id")
-            logger.info(f"✓ Created dashboard with ID: {dashboard_id}")
-            dashboard_url = f"{superset_url}/superset/dashboard/{dashboard_id}/"
-            logger.info(f"✓ Dashboard URL: {dashboard_url}")
+        if existing_dashboard:
+            # Update existing dashboard
+            dashboard_id = existing_dashboard.get("id")
+            update_url = f"{dashboard_api_url}{dashboard_id}"
+            logger.info(f"Updating existing dashboard (ID: {dashboard_id})...")
 
-            # Store in XCom
-            context['task_instance'].xcom_push(
-                key='dashboard_id', value=dashboard_id)
-            context['task_instance'].xcom_push(
-                key='dashboard_url', value=dashboard_url)
+            response = session.put(
+                update_url, headers=headers, json=dashboard_config, timeout=30)
+
+            if response.status_code == 200:
+                logger.info(f"✓ Updated dashboard with ID: {dashboard_id}")
+            else:
+                logger.warning(
+                    f"Dashboard update returned status {response.status_code}, using existing dashboard")
         else:
-            logger.error(f"Failed to create dashboard: {response.text}")
-            raise ValueError(
-                f"Dashboard creation failed: {response.status_code}")
+            # Create new dashboard
+            logger.info("Creating new dashboard...")
+            response = session.post(
+                dashboard_api_url, headers=headers, json=dashboard_config, timeout=30)
+
+            if response.status_code == 201:
+                dashboard_id = response.json().get("id")
+                logger.info(f"✓ Created dashboard with ID: {dashboard_id}")
+            elif response.status_code == 422:
+                # Dashboard exists but we couldn't find it, try to get it
+                logger.info("Dashboard may already exist, fetching...")
+                response = session.get(
+                    dashboard_api_url, headers=headers, timeout=30)
+                response.raise_for_status()
+                dashboards = response.json().get("result", [])
+                dashboard_id = None
+                for dash in dashboards:
+                    if dash.get("slug") == dashboard_slug:
+                        dashboard_id = dash.get("id")
+                        logger.info(
+                            f"✓ Found existing dashboard with ID: {dashboard_id}")
+                        break
+                if not dashboard_id:
+                    raise ValueError("Dashboard exists but could not be found")
+            else:
+                logger.error(f"Failed to create dashboard: {response.text}")
+                raise ValueError(
+                    f"Dashboard creation failed: {response.status_code}")
+
+        # Generate dashboard URL
+        final_dashboard_url = f"{superset_url}/superset/dashboard/{dashboard_id}/"
+        logger.info(f"✓ Dashboard URL: {final_dashboard_url}")
+
+        # Store in XCom
+        context['task_instance'].xcom_push(
+            key='dashboard_id', value=dashboard_id)
+        context['task_instance'].xcom_push(
+            key='dashboard_url', value=final_dashboard_url)
+
     except Exception as e:
-        logger.error(f"Error creating dashboard: {str(e)}")
+        logger.error(f"Error with dashboard: {str(e)}")
         raise
 
-    logger.info("✓ Superset dashboard created successfully!")
+    logger.info("✓ Superset dashboard configured successfully!")
 
 
 def log_pipeline_metadata(**context):

@@ -48,12 +48,13 @@ services:
             - ./airflow/plugins:/opt/airflow/plugins
             - ./data:/opt/airflow/data
             - ./spark:/opt/airflow/spark
+            - ./scripts:/opt/airflow/scripts
             - airflow-data:/opt/airflow
         ports:
             - "8080:8080"
         networks:
             - sentiment-network
-        command: webserver
+        command: bash -c "bash /opt/airflow/scripts/airflow-entrypoint.sh"
         healthcheck:
             test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
             interval: 30s
