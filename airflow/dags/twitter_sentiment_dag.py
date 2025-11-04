@@ -514,6 +514,24 @@ def create_superset_dashboard(**context):
         if response.status_code == 201:
             dataset_id = response.json().get("id")
             logger.info(f"✓ Created dataset with ID: {dataset_id}")
+
+            # Update dataset to set main datetime column
+            update_url = f"{dataset_url}{dataset_id}"
+            update_payload = {
+                "main_dttm_col": "tweetcreatedts"
+            }
+            try:
+                update_response = session.put(
+                    update_url, headers=headers, json=update_payload, timeout=30)
+                if update_response.status_code == 200:
+                    logger.info("✓ Set datetime column for dataset")
+                else:
+                    logger.warning(
+                        f"Could not set datetime column: {update_response.text}")
+            except Exception as update_error:
+                logger.warning(
+                    f"Could not update dataset datetime: {str(update_error)}")
+
         elif response.status_code == 422:
             # Dataset exists, find it
             logger.info("Dataset already exists, fetching...")
@@ -526,6 +544,25 @@ def create_superset_dashboard(**context):
                     dataset_id = ds.get("id")
                     logger.info(
                         f"✓ Found existing dataset with ID: {dataset_id}")
+
+                    # Update dataset to set main_dttm_col
+                    update_url = f"{dataset_url}{dataset_id}"
+                    update_payload = {
+                        "main_dttm_col": "tweetcreatedts"
+                    }
+                    try:
+                        update_response = session.put(
+                            update_url, headers=headers, json=update_payload, timeout=30)
+                        if update_response.status_code == 200:
+                            logger.info(
+                                "✓ Updated dataset with datetime column")
+                        else:
+                            logger.warning(
+                                f"Could not set datetime column: {update_response.text}")
+                    except Exception as update_error:
+                        logger.warning(
+                            f"Could not update dataset datetime: {str(update_error)}")
+
                     break
             if not dataset_id:
                 raise ValueError("Could not find or create dataset")
