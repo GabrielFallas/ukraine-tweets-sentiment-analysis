@@ -540,14 +540,14 @@ def create_superset_dashboard(**context):
 
     time.sleep(2)  # Allow Superset to process
 
-    # Create charts
-    logger.info("Creating charts...")
+    # Get or create charts
+    logger.info("Getting/creating charts...")
     chart_url = f"{superset_url}/api/v1/chart/"
     chart_ids = []
 
     charts_config = [
         {
-            "slice_name": "Sentiment Distribution",
+            "slice_name": "Ukraine Sentiment Distribution",
             "viz_type": "pie",
             "params": json.dumps({
                 "metric": "count",
@@ -560,7 +560,7 @@ def create_superset_dashboard(**context):
             })
         },
         {
-            "slice_name": "Sentiment Over Time",
+            "slice_name": "Ukraine Sentiment Over Time",
             "viz_type": "line",
             "params": json.dumps({
                 "time_range": "No filter",
@@ -573,7 +573,7 @@ def create_superset_dashboard(**context):
             })
         },
         {
-            "slice_name": "Top Locations",
+            "slice_name": "Ukraine Top Locations",
             "viz_type": "bar",
             "params": json.dumps({
                 "metrics": ["count"],
@@ -586,30 +586,56 @@ def create_superset_dashboard(**context):
         }
     ]
 
+    # First, get existing charts
+    try:
+        response = session.get(chart_url, headers=headers, timeout=30)
+        response.raise_for_status()
+        existing_charts = response.json().get("result", [])
+        logger.info(f"Found {len(existing_charts)} existing charts")
+    except Exception as e:
+        logger.warning(f"Could not fetch existing charts: {str(e)}")
+        existing_charts = []
+
     for chart_config in charts_config:
         chart_config["datasource_id"] = dataset_id
         chart_config["datasource_type"] = "table"
+        chart_name = chart_config["slice_name"]
 
-        try:
-            response = session.post(
-                chart_url, headers=headers, json=chart_config, timeout=30)
-            if response.status_code == 201:
-                chart_id = response.json().get("id")
+        # Check if chart already exists
+        existing_chart = None
+        for chart in existing_charts:
+            if chart.get("slice_name") == chart_name:
+                existing_chart = chart
+                chart_id = chart.get("id")
                 chart_ids.append(chart_id)
                 logger.info(
-                    f"✓ Created chart '{chart_config['slice_name']}' with ID: {chart_id}")
-            else:
-                logger.warning(
-                    f"Failed to create chart '{chart_config['slice_name']}': {response.text}")
-        except Exception as e:
-            logger.warning(
-                f"Error creating chart '{chart_config['slice_name']}': {str(e)}")
+                    f"✓ Found existing chart '{chart_name}' with ID: {chart_id}")
+                break
 
-        time.sleep(1)
+        if not existing_chart:
+            # Create new chart
+            try:
+                response = session.post(
+                    chart_url, headers=headers, json=chart_config, timeout=30)
+                if response.status_code == 201:
+                    chart_id = response.json().get("id")
+                    chart_ids.append(chart_id)
+                    logger.info(
+                        f"✓ Created chart '{chart_name}' with ID: {chart_id}")
+                else:
+                    logger.warning(
+                        f"Failed to create chart '{chart_name}': {response.text}")
+            except Exception as e:
+                logger.warning(
+                    f"Error creating chart '{chart_name}': {str(e)}")
+
+        time.sleep(0.5)
 
     if not chart_ids:
-        logger.error("No charts were created")
-        raise ValueError("Chart creation failed")
+        logger.error("No charts were created or found")
+        raise ValueError("Chart creation/retrieval failed")
+
+    logger.info(f"Using {len(chart_ids)} charts: {chart_ids}")
 
     # Create dashboard
     logger.info("Creating/updating dashboard...")
@@ -634,44 +660,18 @@ def create_superset_dashboard(**context):
         logger.warning(f"Could not check for existing dashboard: {str(e)}")
         existing_dashboard = None
 
-    # Create position metadata for charts
-    position_json = {}
-    for i, chart_id in enumerate(chart_ids):
-        row = (i // 2) * 4
-        col = (i % 2) * 6
-        position_json[f"CHART-{chart_id}"] = {
-            "type": "CHART",
-            "id": chart_id,
-            "children": [],
-            "meta": {
-                "width": 6,
-                "height": 4,
-                "chartId": chart_id
-            }
-        }
-
+    # Create dashboard config without position_json (Superset will auto-generate)
     dashboard_config = {
         "dashboard_title": "Ukraine Tweets Sentiment Analysis",
         "slug": dashboard_slug,
-        "position_json": json.dumps(position_json),
         "published": True
     }
 
     try:
         if existing_dashboard:
-            # Update existing dashboard
+            # Use existing dashboard
             dashboard_id = existing_dashboard.get("id")
-            update_url = f"{dashboard_api_url}{dashboard_id}"
-            logger.info(f"Updating existing dashboard (ID: {dashboard_id})...")
-
-            response = session.put(
-                update_url, headers=headers, json=dashboard_config, timeout=30)
-
-            if response.status_code == 200:
-                logger.info(f"✓ Updated dashboard with ID: {dashboard_id}")
-            else:
-                logger.warning(
-                    f"Dashboard update returned status {response.status_code}, using existing dashboard")
+            logger.info(f"Using existing dashboard (ID: {dashboard_id})")
         else:
             # Create new dashboard
             logger.info("Creating new dashboard...")
@@ -702,7 +702,52 @@ def create_superset_dashboard(**context):
                 raise ValueError(
                     f"Dashboard creation failed: {response.status_code}")
 
-        # Generate dashboard URL
+        # Now add charts to the dashboard using PUT endpoint
+        logger.info(f"Adding {len(chart_ids)} charts to dashboard...")
+        update_url = f"{dashboard_api_url}{dashboard_id}"
+        update_payload = {
+            "charts": chart_ids
+        }
+
+        response = session.put(
+            update_url, headers=headers, json=update_payload, timeout=30)
+
+        if response.status_code == 200:
+            logger.info(f"✓ Successfully added charts to dashboard")
+        else:
+            logger.warning(
+                f"Chart addition via API not supported, will link charts directly")
+
+            # Link charts to dashboard via direct database connection
+            try:
+                # Connect to Superset database
+                hook = PostgresHook(postgres_conn_id='postgres_default')
+                conn_info = hook.get_connection('postgres_default')
+
+                # Create connection to superset database
+                engine = create_engine(
+                    f'postgresql://{conn_info.login}:{conn_info.password}@{conn_info.host}:{conn_info.port}/superset'
+                )
+
+                with engine.begin() as db_conn:
+                    # First, remove existing chart associations
+                    db_conn.execute(text(
+                        "DELETE FROM dashboard_slices WHERE dashboard_id = :dashboard_id"
+                    ), {"dashboard_id": dashboard_id})
+
+                    # Add new chart associations
+                    for chart_id in chart_ids:
+                        db_conn.execute(text(
+                            "INSERT INTO dashboard_slices (dashboard_id, slice_id) VALUES (:dashboard_id, :slice_id)"
+                        ), {"dashboard_id": dashboard_id, "slice_id": chart_id})
+
+                    logger.info(
+                        f"✓ Successfully linked {len(chart_ids)} charts to dashboard via database")
+
+            except Exception as db_error:
+                # Generate dashboard URL
+                logger.warning(
+                    f"Could not link charts via database: {str(db_error)}")
         final_dashboard_url = f"{superset_url}/superset/dashboard/{dashboard_id}/"
         logger.info(f"✓ Dashboard URL: {final_dashboard_url}")
 
