@@ -332,6 +332,9 @@ def setup_superset_connection(**context):
     username = "admin"
     password = "admin"
 
+    # Create session to maintain cookies
+    session = requests.Session()
+
     # Login to Superset
     logger.info("Authenticating with Superset...")
     login_url = f"{superset_url}/api/v1/security/login"
@@ -343,7 +346,7 @@ def setup_superset_connection(**context):
     }
 
     try:
-        response = requests.post(login_url, json=login_payload, timeout=30)
+        response = session.post(login_url, json=login_payload, timeout=30)
         response.raise_for_status()
         access_token = response.json().get("access_token")
         logger.info("✓ Successfully authenticated with Superset")
@@ -351,9 +354,28 @@ def setup_superset_connection(**context):
         logger.error(f"Failed to authenticate with Superset: {str(e)}")
         raise
 
-    headers = {
+    # Get CSRF token
+    logger.info("Fetching CSRF token...")
+    csrf_url = f"{superset_url}/api/v1/security/csrf_token/"
+    csrf_headers = {
         "Authorization": f"Bearer {access_token}",
         "Content-Type": "application/json"
+    }
+
+    try:
+        response = session.get(csrf_url, headers=csrf_headers, timeout=30)
+        response.raise_for_status()
+        csrf_token = response.json().get("result")
+        logger.info("✓ Successfully obtained CSRF token")
+    except Exception as e:
+        logger.error(f"Failed to get CSRF token: {str(e)}")
+        raise
+
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+        "X-CSRFToken": csrf_token,
+        "Referer": superset_url
     }
 
     # Check if PostgreSQL database already exists
@@ -361,7 +383,7 @@ def setup_superset_connection(**context):
     db_url = f"{superset_url}/api/v1/database/"
 
     try:
-        response = requests.get(db_url, headers=headers, timeout=30)
+        response = session.get(db_url, headers=headers, timeout=30)
         response.raise_for_status()
         databases = response.json().get("result", [])
 
@@ -378,11 +400,16 @@ def setup_superset_connection(**context):
             logger.info("Creating new PostgreSQL database connection...")
             db_config = {
                 "database_name": "PostgreSQL - Ukraine Tweets",
-                "sqlalchemy_uri": "postgresql://airflow:airflow@sentiment-postgres:5432/airflow",
-                "engine": "postgresql"
+                "sqlalchemy_uri": "postgresql://airflow:airflow@sentiment-postgres:5432/sentiment",
+                "expose_in_sqllab": True,
+                "allow_ctas": False,
+                "allow_cvas": False,
+                "allow_dml": True,
+                "allow_file_upload": False,
+                "extra": "{}"
             }
 
-            response = requests.post(
+            response = session.post(
                 db_url, headers=headers, json=db_config, timeout=30)
 
             if response.status_code != 201:
@@ -415,6 +442,9 @@ def create_superset_dashboard(**context):
     username = "admin"
     password = "admin"
 
+    # Create session to maintain cookies
+    session = requests.Session()
+
     # Login to Superset
     logger.info("Authenticating with Superset...")
     login_url = f"{superset_url}/api/v1/security/login"
@@ -426,7 +456,7 @@ def create_superset_dashboard(**context):
     }
 
     try:
-        response = requests.post(login_url, json=login_payload, timeout=30)
+        response = session.post(login_url, json=login_payload, timeout=30)
         response.raise_for_status()
         access_token = response.json().get("access_token")
         logger.info("✓ Successfully authenticated with Superset")
@@ -434,9 +464,28 @@ def create_superset_dashboard(**context):
         logger.error(f"Failed to authenticate with Superset: {str(e)}")
         raise
 
-    headers = {
+    # Get CSRF token
+    logger.info("Fetching CSRF token...")
+    csrf_url = f"{superset_url}/api/v1/security/csrf_token/"
+    csrf_headers = {
         "Authorization": f"Bearer {access_token}",
         "Content-Type": "application/json"
+    }
+
+    try:
+        response = session.get(csrf_url, headers=csrf_headers, timeout=30)
+        response.raise_for_status()
+        csrf_token = response.json().get("result")
+        logger.info("✓ Successfully obtained CSRF token")
+    except Exception as e:
+        logger.error(f"Failed to get CSRF token: {str(e)}")
+        raise
+
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+        "X-CSRFToken": csrf_token,
+        "Referer": superset_url
     }
 
     # Get database ID from previous task
@@ -459,7 +508,7 @@ def create_superset_dashboard(**context):
     }
 
     try:
-        response = requests.post(
+        response = session.post(
             dataset_url, headers=headers, json=dataset_payload, timeout=30)
 
         if response.status_code == 201:
@@ -468,7 +517,7 @@ def create_superset_dashboard(**context):
         elif response.status_code == 422:
             # Dataset exists, find it
             logger.info("Dataset already exists, fetching...")
-            response = requests.get(dataset_url, headers=headers, timeout=30)
+            response = session.get(dataset_url, headers=headers, timeout=30)
             response.raise_for_status()
             datasets = response.json().get("result", [])
             dataset_id = None
@@ -542,7 +591,7 @@ def create_superset_dashboard(**context):
         chart_config["datasource_type"] = "table"
 
         try:
-            response = requests.post(
+            response = session.post(
                 chart_url, headers=headers, json=chart_config, timeout=30)
             if response.status_code == 201:
                 chart_id = response.json().get("id")
@@ -590,7 +639,7 @@ def create_superset_dashboard(**context):
     }
 
     try:
-        response = requests.post(
+        response = session.post(
             dashboard_url, headers=headers, json=dashboard_config, timeout=30)
         if response.status_code == 201:
             dashboard_id = response.json().get("id")
