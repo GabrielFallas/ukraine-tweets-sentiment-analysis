@@ -35,7 +35,7 @@ default_args = {
 
 # Paths
 DATA_DIR = '/opt/airflow/data'
-RAW_DATA_PATH = f'{DATA_DIR}/raw/ukraine_tweets_sample_100.csv'
+RAW_DATA_PATH = f'{DATA_DIR}/raw/ukraine_tweets_sample_10000.csv'
 PROCESSED_DATA_PATH = f'{DATA_DIR}/processed/sentiment_results'
 SPARK_APP_PATH = '/opt/airflow/spark/sentiment_analysis.py'
 
@@ -583,42 +583,182 @@ def create_superset_dashboard(**context):
     chart_ids = []
 
     charts_config = [
+        # 1. Overall Sentiment Distribution - Pie Chart (WORKING)
         {
-            "slice_name": "Ukraine Sentiment Distribution",
+            "slice_name": "📊 Overall Sentiment Distribution",
             "viz_type": "pie",
             "params": json.dumps({
-                "metric": "count",
+                "adhoc_filters": [],
                 "groupby": ["sentiment"],
-                "viz_type": "pie",
+                "metric": "count",
+                "row_limit": 10000,
+                "sort_by_metric": True,
                 "color_scheme": "supersetColors",
                 "show_labels": True,
                 "show_legend": True,
-                "donut": False
+                "donut": False,
+                "show_labels_threshold": 0,
+                "number_format": ",.0f"
             })
         },
+        # 2. Total Tweets Count - Big Number (WORKING)
         {
-            "slice_name": "Ukraine Sentiment Over Time",
-            "viz_type": "line",
+            "slice_name": "💬 Total Tweets Analyzed",
+            "viz_type": "big_number_total",
             "params": json.dumps({
-                "time_range": "No filter",
-                "granularity_sqla": "tweetcreatedts",
-                "metrics": ["count"],
-                "groupby": ["sentiment"],
-                "viz_type": "line",
-                "color_scheme": "supersetColors",
-                "show_legend": True
+                "metric": "count",
+                "header_font_size": 0.4,
+                "subheader_font_size": 0.15
             })
         },
+        # 3. Top 15 Locations - Horizontal Bar Chart (WORKING)
         {
-            "slice_name": "Ukraine Top Locations",
-            "viz_type": "bar",
+            "slice_name": "🌍 Top 15 Locations by Tweet Volume",
+            "viz_type": "dist_bar",
             "params": json.dumps({
-                "metrics": ["count"],
+                "adhoc_filters": [],
                 "groupby": ["location"],
-                "viz_type": "bar",
-                "color_scheme": "supersetColors",
+                "columns": [],
+                "metrics": ["count"],
+                "row_limit": 15,
+                "order_desc": True,
+                "contribution": False,
+                "color_scheme": "bnbColors",
+                "show_legend": False,
+                "y_axis_format": ",.0f",
+                "bar_stacked": False
+            })
+        },
+        # 4. Top 10 Most Active Users - Bar Chart (WORKING)
+        {
+            "slice_name": "👤 Top 10 Most Active Users",
+            "viz_type": "dist_bar",
+            "params": json.dumps({
+                "adhoc_filters": [],
+                "groupby": ["username"],
+                "columns": [],
+                "metrics": ["count"],
                 "row_limit": 10,
-                "order_desc": True
+                "order_desc": True,
+                "contribution": False,
+                "color_scheme": "lyftColors",
+                "show_legend": False,
+                "y_axis_format": ",.0f"
+            })
+        },
+        # 5. Sentiment Breakdown Table (WORKING)
+        {
+            "slice_name": "📋 Detailed Sentiment Analysis",
+            "viz_type": "table",
+            "params": json.dumps({
+                "adhoc_filters": [],
+                "groupby": ["sentiment"],
+                "metrics": ["count"],
+                "all_columns": [],
+                "percent_metrics": [],
+                "timeseries_limit_metric": "count",
+                "order_by_cols": ["[\"count\", false]"],
+                "order_desc": True,
+                "row_limit": 10000,
+                "include_time": False,
+                "table_timestamp_format": "smart_date",
+                "page_length": 25,
+                "color_pn": True
+            })
+        },
+        # 6. Location-Sentiment Analysis Table (WORKING)
+        {
+            "slice_name": "📍 Sentiment by Location (Top 20)",
+            "viz_type": "table",
+            "params": json.dumps({
+                "adhoc_filters": [],
+                "groupby": ["location", "sentiment"],
+                "metrics": ["count"],
+                "all_columns": [],
+                "percent_metrics": [],
+                "timeseries_limit_metric": "count",
+                "order_by_cols": ["[\"count\", false]"],
+                "order_desc": True,
+                "row_limit": 20,
+                "include_time": False,
+                "table_timestamp_format": "smart_date",
+                "page_length": 10,
+                "color_pn": True
+            })
+        },
+        # 7. Sentiment by Users - Stacked Bar (WORKING)
+        {
+            "slice_name": "👥 Sentiment by Top 10 Users",
+            "viz_type": "dist_bar",
+            "params": json.dumps({
+                "adhoc_filters": [],
+                "groupby": ["username"],
+                "columns": ["sentiment"],
+                "metrics": ["count"],
+                "row_limit": 10,
+                "order_desc": True,
+                "contribution": False,
+                "color_scheme": "googleCategory20c",
+                "show_legend": True,
+                "y_axis_format": ",.0f",
+                "bar_stacked": True
+            })
+        },
+        # 8. Tweet Count by Sentiment - Bar Chart (WORKING)
+        {
+            "slice_name": "📊 Tweet Count by Sentiment Type",
+            "viz_type": "dist_bar",
+            "params": json.dumps({
+                "adhoc_filters": [],
+                "groupby": ["sentiment"],
+                "columns": [],
+                "metrics": ["count"],
+                "row_limit": 10,
+                "order_desc": True,
+                "contribution": False,
+                "color_scheme": "supersetColors",
+                "show_legend": False,
+                "y_axis_format": ",.0f",
+                "show_bar_value": True
+            })
+        },
+        # 9. Popular Hashtags Analysis (WORKING)
+        {
+            "slice_name": "#️⃣ Top 30 Hashtags",
+            "viz_type": "table",
+            "params": json.dumps({
+                "adhoc_filters": [],
+                "groupby": ["hashtags"],
+                "metrics": ["count"],
+                "all_columns": [],
+                "percent_metrics": [],
+                "timeseries_limit_metric": "count",
+                "order_by_cols": ["[\"count\", false]"],
+                "order_desc": True,
+                "row_limit": 30,
+                "include_time": False,
+                "table_timestamp_format": "smart_date",
+                "page_length": 15,
+                "table_filter": False
+            })
+        },
+        # 10. User Engagement Overview (WORKING)
+        {
+            "slice_name": "📊 User & Location Statistics",
+            "viz_type": "table",
+            "params": json.dumps({
+                "adhoc_filters": [],
+                "groupby": ["username", "location"],
+                "metrics": ["count"],
+                "all_columns": [],
+                "percent_metrics": [],
+                "timeseries_limit_metric": "count",
+                "order_by_cols": ["[\"count\", false]"],
+                "order_desc": True,
+                "row_limit": 25,
+                "include_time": False,
+                "table_timestamp_format": "smart_date",
+                "page_length": 10
             })
         }
     ]
