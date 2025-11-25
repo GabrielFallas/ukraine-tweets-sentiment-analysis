@@ -35,7 +35,7 @@ default_args = {
 
 # Paths
 DATA_DIR = '/opt/airflow/data'
-RAW_DATA_PATH = f'{DATA_DIR}/raw/ukraine_tweets_sample_10000.csv'
+RAW_DATA_PATH = f'{DATA_DIR}/raw/ukraine_tweets_sample_100000.csv'
 PROCESSED_DATA_PATH = f'{DATA_DIR}/processed/sentiment_results'
 SPARK_APP_PATH = '/opt/airflow/spark/sentiment_analysis.py'
 
