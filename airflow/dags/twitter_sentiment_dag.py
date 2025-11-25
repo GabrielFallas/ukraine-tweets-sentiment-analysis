@@ -595,7 +595,7 @@ def create_superset_dashboard(**context):
     chart_ids = []
 
     charts_config = [
-        # 1. Sentiment Trends Over Time (Line Chart) - INSIGHTFUL
+        # 1. Sentiment Trends Over Time (Line Chart) - FIXED
         {
             "slice_name": "📈 Sentiment Evolution Over Time",
             "viz_type": "echarts_timeseries_line",
@@ -611,7 +611,8 @@ def create_superset_dashboard(**context):
                 "y_axis_format": ",.0f",
                 "x_axis_time_format": "smart_date",
                 "logAxis": False,
-                "y_axis_title": "Number of Tweets"
+                "y_axis_title": "Number of Tweets",
+                "zoomable": True
             })
         },
         # 2. Overall Sentiment Distribution (Donut Chart) - INSIGHTFUL
@@ -633,18 +634,18 @@ def create_superset_dashboard(**context):
                 "label_type": "key_percent"
             })
         },
-        # 3. Top Hashtags (Word Cloud) - INSIGHTFUL
+        # 3. Top Hashtags (Table instead of Word Cloud for stability) - FIXED
         {
             "slice_name": "☁️ Trending Topics (Hashtags)",
-            "viz_type": "word_cloud",
+            "viz_type": "table",
             "params": json.dumps({
-                "series": "hashtags",
-                "metric": "count",
+                "groupby": ["hashtags"],
+                "metrics": ["count"],
                 "row_limit": 50,
-                "size_from": "10",
-                "size_to": "70",
-                "rotation": "square",
-                "color_scheme": "supersetColors"
+                "order_desc": True,
+                "percent_metrics": [],
+                "timeseries_limit_metric": "count",
+                "include_time": False
             })
         },
         # 4. Most Viral Tweets (Table) - INSIGHTFUL
@@ -668,17 +669,38 @@ def create_superset_dashboard(**context):
                 "color_pn": False
             })
         },
-        # 5. Geographic Sentiment (Treemap) - INSIGHTFUL
+        # 5. Geographic Sentiment (Stacked Bar Chart) - FIXED
         {
             "slice_name": "🗺️ Geographic Sentiment Distribution",
-            "viz_type": "treemap",
+            "viz_type": "dist_bar",
             "params": json.dumps({
                 "groupby": ["location"],
+                "columns": ["sentiment"],
                 "metrics": ["count"],
-                "color_scheme": "bnbColors",
-                "treemap_ratio": 1.618,
-                "number_format": ",.0f",
-                "row_limit": 50
+                "adhoc_filters": [
+                    {
+                        "expressionType": "SIMPLE",
+                        "subject": "location",
+                        "operator": "!=",
+                        "comparator": "",
+                        "clause": "WHERE"
+                    },
+                    {
+                        "expressionType": "SIMPLE",
+                        "subject": "location",
+                        "operator": "IS NOT NULL",
+                        "clause": "WHERE"
+                    }
+                ],
+                "row_limit": 20,
+                "bar_stacked": True,
+                "order_desc": True,
+                "color_scheme": "supersetColors",
+                "show_legend": True,
+                "y_axis_format": ",.0f",
+                "x_axis_label": "Location",
+                "y_axis_label": "Number of Tweets",
+                "show_bar_value": False
             })
         },
         # 6. Engagement by Sentiment (Bar Chart) - INSIGHTFUL
