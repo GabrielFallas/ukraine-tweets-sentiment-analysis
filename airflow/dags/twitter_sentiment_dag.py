@@ -17,6 +17,7 @@ import json
 import requests
 import pandas as pd
 from sqlalchemy import create_engine, text
+import sqlalchemy
 import time
 
 # Configure logging
@@ -284,16 +285,27 @@ def load_results_to_postgres(**context):
     # Convert columns to proper types
     logger.info("Converting data types...")
     numeric_columns = ['userid', 'followers',
-                       'following', 'tweetid', 'retweetcount']
+                       'following', 'tweetid', 'retweetcount', 'favorite_count']
     for col in numeric_columns:
         if col in df.columns:
             df[col] = pd.to_numeric(
                 df[col], errors='coerce').fillna(0).astype('int64')
 
+    # Convert timestamp columns
+    logger.info("Converting timestamp columns...")
+    timestamp_columns = ['tweetcreatedts', 'usercreatedts']
+    for col in timestamp_columns:
+        if col in df.columns:
+            df[col] = pd.to_datetime(df[col], errors='coerce')
+
     # Load to PostgreSQL
     logger.info("Loading data to PostgreSQL table 'ukraine_tweets_sentiment'...")
     df.to_sql('ukraine_tweets_sentiment', engine,
-              if_exists='replace', index=False)
+              if_exists='replace', index=False,
+              dtype={
+                  'tweetcreatedts': sqlalchemy.types.DateTime(),
+                  'usercreatedts': sqlalchemy.types.DateTime()
+              })
 
     # Create indexes
     logger.info("Creating indexes...")
@@ -583,9 +595,28 @@ def create_superset_dashboard(**context):
     chart_ids = []
 
     charts_config = [
-        # 1. Overall Sentiment Distribution - Pie Chart (WORKING)
+        # 1. Sentiment Trends Over Time (Line Chart) - INSIGHTFUL
         {
-            "slice_name": "📊 Overall Sentiment Distribution",
+            "slice_name": "📈 Sentiment Evolution Over Time",
+            "viz_type": "echarts_timeseries_line",
+            "params": json.dumps({
+                "metrics": ["count"],
+                "groupby": ["sentiment"],
+                "time_grain_sqla": "P1D",
+                "granularity_sqla": "tweetcreatedts",
+                "time_range": "No filter",
+                "color_scheme": "supersetColors",
+                "show_legend": True,
+                "rich_tooltip": True,
+                "y_axis_format": ",.0f",
+                "x_axis_time_format": "smart_date",
+                "logAxis": False,
+                "y_axis_title": "Number of Tweets"
+            })
+        },
+        # 2. Overall Sentiment Distribution (Donut Chart) - INSIGHTFUL
+        {
+            "slice_name": "📊 Overall Sentiment Balance",
             "viz_type": "pie",
             "params": json.dumps({
                 "adhoc_filters": [],
@@ -596,12 +627,108 @@ def create_superset_dashboard(**context):
                 "color_scheme": "supersetColors",
                 "show_labels": True,
                 "show_legend": True,
-                "donut": False,
-                "show_labels_threshold": 0,
-                "number_format": ",.0f"
+                "donut": True,
+                "show_labels_threshold": 5,
+                "number_format": ",.0f",
+                "label_type": "key_percent"
             })
         },
-        # 2. Total Tweets Count - Big Number (WORKING)
+        # 3. Top Hashtags (Word Cloud) - INSIGHTFUL
+        {
+            "slice_name": "☁️ Trending Topics (Hashtags)",
+            "viz_type": "word_cloud",
+            "params": json.dumps({
+                "series": "hashtags",
+                "metric": "count",
+                "row_limit": 50,
+                "size_from": "10",
+                "size_to": "70",
+                "rotation": "square",
+                "color_scheme": "supersetColors"
+            })
+        },
+        # 4. Most Viral Tweets (Table) - INSIGHTFUL
+        {
+            "slice_name": "🔥 Most Viral Tweets (Top Retweeted)",
+            "viz_type": "table",
+            "params": json.dumps({
+                "adhoc_filters": [],
+                "groupby": ["text", "username", "sentiment"],
+                "metrics": ["sum__retweetcount"],
+                "all_columns": [],
+                "percent_metrics": [],
+                "timeseries_limit_metric": "sum__retweetcount",
+                "order_by_cols": ["[\"sum__retweetcount\", false]"],
+                "order_desc": True,
+                "row_limit": 50,
+                "include_time": False,
+                "table_timestamp_format": "smart_date",
+                "page_length": 10,
+                "align_pn": False,
+                "color_pn": False
+            })
+        },
+        # 5. Geographic Sentiment (Treemap) - INSIGHTFUL
+        {
+            "slice_name": "🗺️ Geographic Sentiment Distribution",
+            "viz_type": "treemap",
+            "params": json.dumps({
+                "groupby": ["location"],
+                "metrics": ["count"],
+                "color_scheme": "bnbColors",
+                "treemap_ratio": 1.618,
+                "number_format": ",.0f",
+                "row_limit": 50
+            })
+        },
+        # 6. Engagement by Sentiment (Bar Chart) - INSIGHTFUL
+        {
+            "slice_name": "👍 Engagement by Sentiment",
+            "viz_type": "dist_bar",
+            "params": json.dumps({
+                "adhoc_filters": [],
+                "groupby": ["sentiment"],
+                "columns": [],
+                "metrics": [
+                    {
+                        "expressionType": "SIMPLE",
+                        "column": {
+                            "column_name": "retweetcount",
+                            "type": "BIGINT"
+                        },
+                        "aggregate": "SUM",
+                        "label": "Total Retweets"
+                    }
+                ],
+                "row_limit": 10,
+                "order_desc": True,
+                "contribution": False,
+                "color_scheme": "supersetColors",
+                "show_legend": False,
+                "y_axis_format": ",.0f",
+                "show_bar_value": True,
+                "y_axis_title": "Total Retweets"
+            })
+        },
+        # 7. Total Reach (Big Number) - INSIGHTFUL
+        {
+            "slice_name": "📢 Total Potential Reach (Followers)",
+            "viz_type": "big_number_total",
+            "params": json.dumps({
+                "metric": {
+                    "expressionType": "SIMPLE",
+                    "column": {
+                        "column_name": "followers",
+                        "type": "BIGINT"
+                    },
+                    "aggregate": "SUM",
+                    "label": "Total Followers"
+                },
+                "header_font_size": 0.4,
+                "subheader_font_size": 0.15
+            })
+        },
+        # 8. Total Tweets (Big Number) - BASIC
         {
             "slice_name": "💬 Total Tweets Analyzed",
             "viz_type": "big_number_total",
@@ -609,156 +736,6 @@ def create_superset_dashboard(**context):
                 "metric": "count",
                 "header_font_size": 0.4,
                 "subheader_font_size": 0.15
-            })
-        },
-        # 3. Top 15 Locations - Horizontal Bar Chart (WORKING)
-        {
-            "slice_name": "🌍 Top 15 Locations by Tweet Volume",
-            "viz_type": "dist_bar",
-            "params": json.dumps({
-                "adhoc_filters": [],
-                "groupby": ["location"],
-                "columns": [],
-                "metrics": ["count"],
-                "row_limit": 15,
-                "order_desc": True,
-                "contribution": False,
-                "color_scheme": "bnbColors",
-                "show_legend": False,
-                "y_axis_format": ",.0f",
-                "bar_stacked": False
-            })
-        },
-        # 4. Top 10 Most Active Users - Bar Chart (WORKING)
-        {
-            "slice_name": "👤 Top 10 Most Active Users",
-            "viz_type": "dist_bar",
-            "params": json.dumps({
-                "adhoc_filters": [],
-                "groupby": ["username"],
-                "columns": [],
-                "metrics": ["count"],
-                "row_limit": 10,
-                "order_desc": True,
-                "contribution": False,
-                "color_scheme": "lyftColors",
-                "show_legend": False,
-                "y_axis_format": ",.0f"
-            })
-        },
-        # 5. Sentiment Breakdown Table (WORKING)
-        {
-            "slice_name": "📋 Detailed Sentiment Analysis",
-            "viz_type": "table",
-            "params": json.dumps({
-                "adhoc_filters": [],
-                "groupby": ["sentiment"],
-                "metrics": ["count"],
-                "all_columns": [],
-                "percent_metrics": [],
-                "timeseries_limit_metric": "count",
-                "order_by_cols": ["[\"count\", false]"],
-                "order_desc": True,
-                "row_limit": 10000,
-                "include_time": False,
-                "table_timestamp_format": "smart_date",
-                "page_length": 25,
-                "color_pn": True
-            })
-        },
-        # 6. Location-Sentiment Analysis Table (WORKING)
-        {
-            "slice_name": "📍 Sentiment by Location (Top 20)",
-            "viz_type": "table",
-            "params": json.dumps({
-                "adhoc_filters": [],
-                "groupby": ["location", "sentiment"],
-                "metrics": ["count"],
-                "all_columns": [],
-                "percent_metrics": [],
-                "timeseries_limit_metric": "count",
-                "order_by_cols": ["[\"count\", false]"],
-                "order_desc": True,
-                "row_limit": 20,
-                "include_time": False,
-                "table_timestamp_format": "smart_date",
-                "page_length": 10,
-                "color_pn": True
-            })
-        },
-        # 7. Sentiment by Users - Stacked Bar (WORKING)
-        {
-            "slice_name": "👥 Sentiment by Top 10 Users",
-            "viz_type": "dist_bar",
-            "params": json.dumps({
-                "adhoc_filters": [],
-                "groupby": ["username"],
-                "columns": ["sentiment"],
-                "metrics": ["count"],
-                "row_limit": 10,
-                "order_desc": True,
-                "contribution": False,
-                "color_scheme": "googleCategory20c",
-                "show_legend": True,
-                "y_axis_format": ",.0f",
-                "bar_stacked": True
-            })
-        },
-        # 8. Tweet Count by Sentiment - Bar Chart (WORKING)
-        {
-            "slice_name": "📊 Tweet Count by Sentiment Type",
-            "viz_type": "dist_bar",
-            "params": json.dumps({
-                "adhoc_filters": [],
-                "groupby": ["sentiment"],
-                "columns": [],
-                "metrics": ["count"],
-                "row_limit": 10,
-                "order_desc": True,
-                "contribution": False,
-                "color_scheme": "supersetColors",
-                "show_legend": False,
-                "y_axis_format": ",.0f",
-                "show_bar_value": True
-            })
-        },
-        # 9. Popular Hashtags Analysis (WORKING)
-        {
-            "slice_name": "#️⃣ Top 30 Hashtags",
-            "viz_type": "table",
-            "params": json.dumps({
-                "adhoc_filters": [],
-                "groupby": ["hashtags"],
-                "metrics": ["count"],
-                "all_columns": [],
-                "percent_metrics": [],
-                "timeseries_limit_metric": "count",
-                "order_by_cols": ["[\"count\", false]"],
-                "order_desc": True,
-                "row_limit": 30,
-                "include_time": False,
-                "table_timestamp_format": "smart_date",
-                "page_length": 15,
-                "table_filter": False
-            })
-        },
-        # 10. User Engagement Overview (WORKING)
-        {
-            "slice_name": "📊 User & Location Statistics",
-            "viz_type": "table",
-            "params": json.dumps({
-                "adhoc_filters": [],
-                "groupby": ["username", "location"],
-                "metrics": ["count"],
-                "all_columns": [],
-                "percent_metrics": [],
-                "timeseries_limit_metric": "count",
-                "order_by_cols": ["[\"count\", false]"],
-                "order_desc": True,
-                "row_limit": 25,
-                "include_time": False,
-                "table_timestamp_format": "smart_date",
-                "page_length": 10
             })
         }
     ]
