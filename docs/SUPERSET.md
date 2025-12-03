@@ -1,18 +1,8 @@
-# Connect Superset to PostgreSQL - Step by Step Guide
+# Superset Visualization Guide
 
-## ✅ Data Status
+Connect Superset to your sentiment analysis data and create interactive dashboards.
 
--   **101 tweets** loaded into PostgreSQL
--   **Table**: `ukraine_tweets_sentiment`
--   **Database**: `airflow` (PostgreSQL)
--   **Sentiment Distribution**:
-    -   NEGATIVE: 74 tweets (73%)
-    -   POSITIVE: 19 tweets (19%)
-    -   NULL: 8 tweets (8%)
-
----
-
-## 🔧 Step 1: Access Superset
+## 🔧 Access Superset
 
 1. Open your browser and go to: **http://localhost:8088**
 2. Login with:
@@ -143,26 +133,47 @@
 
 ---
 
-## 🚀 Next Steps
+## 🔗 Alternative: Connect to Druid
 
-### Scale Up
+For real-time analytics, connect to Apache Druid instead of PostgreSQL:
 
-Once your visualizations are working with the 100-row sample:
-
-1. Update `twitter_sentiment_dag.py` line 35 to use larger dataset
-2. Run the full pipeline
-3. Re-run `load_to_postgres_sqlalchemy.py` to load new data
-4. Your Superset charts will automatically show the new data!
-
-### Advanced Analytics
-
--   Add filters by date range, username, or location
--   Calculate sentiment percentages with custom SQL metrics
--   Create word clouds from hashtags
--   Analyze trends over time with moving averages
+1. Go to **Settings** → **Database Connections** → **+ Database**
+2. Select **Apache Druid**
+3. Enter connection string:
+    ```
+    druid://sentiment-druid-broker:8082/druid/v2/sql/
+    ```
+4. Click **Test Connection** → **Connect**
 
 ---
 
-## ✨ Your Data Is Ready!
+## 📊 SQL Lab Queries
 
-All 101 tweets are now in PostgreSQL and ready to visualize. Follow the steps above to create your first dashboard! 🎉
+Use SQL Lab for ad-hoc analysis:
+
+```sql
+-- Sentiment breakdown
+SELECT sentiment, COUNT(*) as count
+FROM ukraine_tweets_sentiment
+GROUP BY sentiment;
+
+-- Top retweeted tweets
+SELECT username, text, retweetcount, sentiment
+FROM ukraine_tweets_sentiment
+ORDER BY retweetcount DESC
+LIMIT 10;
+
+-- Sentiment by location
+SELECT location, sentiment, COUNT(*) as count
+FROM ukraine_tweets_sentiment
+WHERE location IS NOT NULL
+GROUP BY location, sentiment
+ORDER BY count DESC;
+```
+
+---
+
+## 📚 More Resources
+
+-   [Apache Superset Documentation](https://superset.apache.org/docs/intro)
+-   [TROUBLESHOOTING.md](TROUBLESHOOTING.md) - For connection issues

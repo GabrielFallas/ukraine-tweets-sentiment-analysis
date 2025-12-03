@@ -64,17 +64,12 @@ ukraine-tweets-sentiment-analysis/
 │       └── monitor_pipeline.py    # Pipeline monitoring
 │
 ├── 📂 docs/                       # Documentation
+│   ├── INDEX.md                   # Documentation index
+│   ├── QUICKSTART.md              # Quick start guide
 │   ├── ARCHITECTURE.md            # System architecture
-│   ├── PROJECT_STRUCTURE.md       # Project organization
-│   ├── QUICKSTART.md             # Quick start guide
-│   ├── TROUBLESHOOTING.md        # Common issues and fixes
-│   ├── SUPERSET_CONNECTION_GUIDE.md  # Superset setup (⭐ Start here!)
-│   ├── SUPERSET_SETUP.md         # Detailed Superset guide
-│   ├── CONNECT_SUPERSET_TO_DRUID.md  # Druid connection
-│   ├── VISUAL_OVERVIEW.md        # Visual diagrams
-│   ├── INDEX.md                  # Documentation index
-│   ├── SUMMARY.md                # Project summary
-│   └── CHECKLIST.md              # Implementation checklist
+│   ├── AUTOMATION_GUIDE.md        # Pipeline automation
+│   ├── SUPERSET.md                # Visualization guide
+│   └── TROUBLESHOOTING.md         # Common issues and fixes
 │
 ├── 📂 config/                     # Configuration files
 │   └── generate_keys.py          # Generate encryption keys
@@ -166,7 +161,7 @@ python tools/diagnostics/verify_postgres.py
 
     - Username: `admin`, Password: `admin`
 
-2. **Follow the detailed guide**: [`docs/SUPERSET_CONNECTION_GUIDE.md`](docs/SUPERSET_CONNECTION_GUIDE.md)
+2. **Follow the detailed guide**: [`docs/SUPERSET.md`](docs/SUPERSET.md)
 
 3. **Quick setup**:
 
@@ -189,17 +184,12 @@ python tools/diagnostics/verify_postgres.py
 
 ## 📊 Pipeline Overview
 
-```
-┌─────────────┐     ┌──────────────┐     ┌─────────────┐     ┌──────────────┐
-│   Raw CSV   │────▶│   Airflow    │────▶│    Spark    │────▶│  PostgreSQL  │
-│  (Tweets)   │     │ Orchestrator │     │  Sentiment  │     │   (Results)  │
-└─────────────┘     └──────────────┘     │  Analysis   │     └──────────────┘
-                                          └─────────────┘             │
-                                                                      ▼
-                                                              ┌──────────────┐
-                                                              │   Superset   │
-                                                              │ (Dashboards) │
-                                                              └──────────────┘
+```mermaid
+flowchart LR
+    A[("📄 Raw CSV<br/>(Tweets)")] --> B["🔄 Airflow<br/>Orchestrator"]
+    B --> C["⚡ Spark<br/>Sentiment Analysis"]
+    C --> D[("💾 PostgreSQL<br/>(Results)")]
+    D --> E["📊 Superset<br/>(Dashboards)"]
 ```
 
 ### Pipeline Steps:
@@ -256,37 +246,6 @@ Or create manually:
     - Superset Dashboard Service
     - PostgreSQL Database Service
 4. Run metadata ingestion to track data lineage
-
-## 📁 Project Structure
-
-```
-ukraine-tweets-sentiment-analysis/
-├── airflow/
-│   ├── dags/
-│   │   └── twitter_sentiment_dag.py    # Main orchestration DAG
-│   ├── Dockerfile
-│   └── requirements.txt
-├── spark/
-│   ├── sentiment_analysis.py           # Spark processing script
-│   ├── Dockerfile
-│   └── requirements.txt
-├── superset/
-│   ├── create_dashboard.py             # Dashboard automation
-│   ├── init_superset.sh               # Initialization script
-│   └── Dockerfile
-├── openmetadata/
-│   ├── config.py                       # OpenMetadata connectors
-│   └── init_openmetadata.sh
-├── scripts/
-│   └── init-databases.sh              # PostgreSQL setup
-├── data/
-│   ├── raw/                           # Input CSV files
-│   └── processed/                     # Spark output
-├── docker-compose.yml                 # Main orchestration file
-├── .env.example                       # Environment template
-├── .gitignore
-└── README.md
-```
 
 ## 🔧 Pipeline Details
 

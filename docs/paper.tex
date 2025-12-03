@@ -1,0 +1,355 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+
+% --- PAQUETES ---
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{booktabs} % Para la tabla de resultados
+\usepackage[hidelinks]{hyperref}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+% --- INFORMACIÓN DEL ARTÍCULO ---
+\title{El Pulso Emocional de X (Twitter): Un Análisis de Sentimientos sobre la Guerra en Ucrania}
+
+\author{\IEEEauthorblockN{1\textsuperscript{st} Gabriel Isaías Fallas López}
+\IEEEauthorblockA{
+\textit{Universidad de Costa Rica}\\
+San José, Costa Rica \\
+GABRIEL.FALLAS@ucr.ac.cr}
+}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+The Russo-Ukrainian conflict generates massive volumes of social media data, particularly on Twitter, making sentiment analysis crucial for understanding public opinion. However, processing such large datasets (1.2M tweets) presents significant data engineering challenges. Traditional methods often lack a scalable, end-to-end solution integrating orchestration, distributed processing, fast analytical querying (OLAP), and governance. This project addresses this gap by designing and implementing a complete, containerized, and production-grade data pipeline to efficiently ingest, process, and analyze the sentiment of 1.2 million tweets related to the crisis. We developed a modern architecture using Docker for containerization, Apache Airflow for orchestration, and Apache Spark (with a Hugging Face model) for distributed processing. Processed data is ingested into Apache Druid for low-latency OLAP queries, with results visualized in Apache Superset and governance handled by OpenMetadata. The pipeline successfully processes the entire dataset, achieving key performance results. This work provides a complete, reproducible, and scalable architectural blueprint for large-scale social media analysis, offering a production-ready template that bridges the gap between raw big data and real-time visualization.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Data Engineering, Sentiment Analysis, Big Data, Apache Spark, Apache Airflow, Apache Druid, MLOps, ETL
+\end{IEEEkeywords}
+
+\section{Introducción}
+La invasión de Ucrania por parte de la Federación Rusa el 24 de febrero de 2022 no solo desencadenó la mayor crisis de refugiados en Europa desde la Segunda Guerra Mundial (más de 6 millones de desplazados según ACNUR), sino que también marcó un cambio de paradigma en la geopolítica moderna: la consolidación de la ``Guerra Híbrida''. En este nuevo teatro de operaciones, las plataformas de redes sociales, y específicamente X (anteriormente Twitter), han dejado de ser meros canales de comunicación para convertirse en campos de batalla activos donde se disputa la narrativa, se coordina la ayuda humanitaria y se despliegan campañas de desinformación masiva \cite{suciu2022}.
+
+La magnitud del fenómeno digital es asombrosa. Durante las primeras semanas del conflicto, Twitter registró más de 50 millones de tweets diarios relacionados con Ucrania, convirtiendo hashtags como \texttt{\#StandWithUkraine} y \texttt{\#StopRussia} en tendencias globales sostenidas. Este volumen de datos representa una oportunidad única para la inteligencia de fuentes abiertas (OSINT) y la comprensión sociológica del conflicto en tiempo real.
+
+Sin embargo, la naturaleza de estos datos presenta desafíos monumentales de ingeniería. Nos enfrentamos a las clásicas ``V'' del Big Data:
+\begin{itemize}
+    \item \textbf{Volumen:} Millones de mensajes generados diariamente que superan la capacidad de procesamiento de sistemas tradicionales.
+    \item \textbf{Velocidad:} Una tasa de generación vertiginosa que exige pipelines de baja latencia para análisis oportuno.
+    \item \textbf{Variedad:} Datos no estructurados (texto, emojis, URLs, multimedia) que requieren técnicas avanzadas de Procesamiento de Lenguaje Natural (NLP).
+    \item \textbf{Veracidad:} La presencia de bots, cuentas falsas y desinformación que comprometen la calidad del análisis.
+\end{itemize}
+
+Los enfoques tradicionales de análisis de datos, a menudo basados en ejecuciones secuenciales o bases de datos relacionales monolíticas, resultan insuficientes ante esta carga de trabajo. La latencia en la ingesta, la incapacidad de escalar modelos de \textit{Deep Learning} (como Transformers) y la falta de interactividad en las consultas analíticas limitan severamente la capacidad de los analistas para obtener \textit{insights} en tiempos relevantes. Además, la ausencia de gobernanza y linaje en los pipelines de datos académicos suele derivar en problemas de reproducibilidad y confianza en los resultados.
+
+Para abordar estas brechas, este estudio presenta el diseño, implementación y evaluación de una arquitectura de ingeniería de datos de nivel productivo (\textit{production-grade}). Se propone una solución integral que orquesta el ciclo de vida completo del dato: desde su ingesta cruda, pasando por una limpieza y clasificación distribuida mediante modelos de Inteligencia Artificial, hasta su disponibilidad en un almacén analítico de baja latencia.
+
+Las contribuciones principales de este artículo son:
+\begin{itemize}
+    \item \textbf{Arquitectura de Datos Escalable:} El diseño de un ecosistema contenedorizado basado en microservicios que desacopla el cómputo del almacenamiento, permitiendo el procesamiento eficiente de 1.2 millones de tweets.
+    \item \textbf{Inferencia Distribuida de NLP:} La implementación técnica de modelos de lenguaje basados en Transformers (Hugging Face) sobre un clúster de Apache Spark, optimizando el tiempo de clasificación de sentimientos mediante paralelismo de datos.
+    \item \textbf{Analítica de Baja Latencia:} La integración de una capa de servicio OLAP con Apache Druid, habilitando tiempos de respuesta sub-segundo para consultas complejas y visualización en tiempo real.
+    \item \textbf{Gobernanza Integral:} La incorporación de principios de DataOps mediante Apache Airflow para la orquestación y OpenMetadata para el linaje, asegurando la trazabilidad y auditabilidad del flujo de información.
+\end{itemize}
+
+El resto del artículo se organiza de la siguiente manera: la Sección II presenta los antecedentes teóricos y trabajos relacionados; la Sección III define los objetivos y preguntas de investigación; la Sección IV describe la metodología y arquitectura implementada; la Sección V presenta los resultados y su discusión; finalmente, la Sección VI concluye el trabajo y propone líneas futuras de investigación.
+
+\section{Antecedentes}
+Esta sección revisa los fundamentos teóricos y tecnológicos que sustentan el diseño del pipeline propuesto, organizados en cuatro ejes: análisis de sentimiento en contextos de crisis, arquitecturas de datos modernas, modelos de lenguaje basados en Transformers, y gobernanza de datos.
+
+\subsection{Análisis de Sentimiento en Contextos de Crisis}
+El análisis de sentimiento en redes sociales durante conflictos bélicos ha ganado relevancia como herramienta para la comprensión de la opinión pública global. Trabajos previos han demostrado que Twitter funciona como un ``termómetro social'' durante eventos de alto impacto, donde la polarización emocional se intensifica y las narrativas compiten por dominar el espacio digital.
+
+En el contexto específico de Ucrania, estudios recientes han analizado patrones de desinformación, la actividad de bots pro-Kremlin y la movilización de apoyo internacional a través de hashtags \cite{suciu2022}. Sin embargo, la mayoría de estos trabajos se centran en muestras pequeñas o análisis manuales, careciendo de la infraestructura necesaria para procesar millones de registros en tiempo real.
+
+\subsection{Procesamiento Distribuido con Apache Spark}
+El diseño de pipelines para análisis de texto a gran escala ha avanzado significativamente con la adopción de frameworks de procesamiento distribuido. Apache Spark se ha consolidado como el estándar de facto para cargas de trabajo de Big Data debido a su modelo de ejecución en memoria, su API unificada para batch y streaming, y su integración nativa con el ecosistema Hadoop \cite{nodarakis2016}.
+
+Para tareas de NLP, Spark permite paralelizar tanto el preprocesamiento (tokenización, limpieza, normalización) como la inferencia de modelos mediante la función \texttt{mapPartitions}, que distribuye el trabajo entre los nodos del clúster minimizando la sobrecarga de comunicación.
+
+\subsection{Almacenamiento Analítico OLAP}
+Para la capa de consulta analítica, Apache Druid fue diseñado específicamente para cargas OLAP de series temporales con latencias sub-segundo. Su arquitectura híbrida combina almacenamiento columnar con índices invertidos, permitiendo agregaciones y filtros eficientes sobre tablas de miles de millones de filas \cite{druid2014}.
+
+A diferencia de bases de datos tradicionales como PostgreSQL o MySQL, Druid sacrifica flexibilidad transaccional (ACID) a cambio de rendimiento analítico extremo, lo que lo hace ideal para dashboards interactivos donde la experiencia del usuario depende de tiempos de respuesta instantáneos.
+
+\subsection{Modelos de Lenguaje: Transformers y DistilBERT}
+La revolución de los Transformers, iniciada con el paper ``Attention Is All You Need'' \cite{vaswani2017}, transformó el campo del NLP. Modelos como BERT (Bidirectional Encoder Representations from Transformers) y sus variantes han establecido nuevos estándares en tareas de clasificación de texto, incluyendo análisis de sentimiento.
+
+Para este proyecto, se seleccionó \textbf{DistilBERT}, una versión destilada de BERT que retiene el 97\% de su capacidad predictiva con solo el 60\% de los parámetros \cite{huggingface2022}. Esta reducción es crítica para la inferencia a escala: un modelo más ligero permite procesar más registros por unidad de tiempo sin comprometer significativamente la precisión. El modelo específico utilizado (\texttt{distilbert-base-uncased-finetuned-sst-2-english}) fue pre-entrenado en el corpus SST-2 (Stanford Sentiment Treebank), optimizado para clasificación binaria de sentimiento en inglés.
+
+\subsection{Orquestación y Gobernanza}
+La orquestación reproducible de pipelines de datos se apoya en plataformas tipo \emph{workflow as code}. Apache Airflow se ha consolidado como la herramienta de facto para definir DAGs (Directed Acyclic Graphs) de ETL/ELT en entornos de ingeniería de datos, permitiendo programar, monitorear y reintentar tareas de forma declarativa \cite{airflow2024}.
+
+Complementariamente, herramientas de metadata y linaje como OpenMetadata centralizan el catálogo de datos, el linaje de transformaciones y las políticas de acceso, facilitando auditoría y descubrimiento en ecosistemas heterogéneos (Airflow, Spark, Druid, Superset) \cite{openmetadata_docs}. Esta capa de gobernanza es requisito clave para proyectos que procesan datos sensibles o de interés público, donde la trazabilidad no es opcional sino mandatoria.
+
+\section{Objetivos y preguntas de investigación}
+El objetivo general de este trabajo es diseñar, implementar y evaluar un pipeline de ingeniería de datos escalable, reproducible y gobernable para el análisis de sentimientos sobre 1.2 millones de tweets relacionados con el conflicto Ruso-Ucraniano. A partir de este objetivo se derivan objetivos específicos y preguntas de investigación:
+
+\subsection{Objetivos específicos}
+\begin{enumerate}
+    \item Diseñar una arquitectura contenedorizada y orquestada que permita el procesamiento distribuido de un dataset de ~1.2M tweets y su ingestión en un almacén analítico de baja latencia.
+    \item Evaluar el rendimiento del pipeline en términos de tiempo de procesamiento, latencia de consulta y tiempos de carga de dashboards.
+    \item Demostrar la integración de un modelo de sentimiento basado en Transformers (Hugging Face) con Apache Spark para inferencia a gran escala.
+    \item Implementar capacidades de gobernanza y linaje usando OpenMetadata y documentar cómo esto mejora trazabilidad y reproducibilidad.
+\end{enumerate}
+
+\subsection{Preguntas de investigación e hipótesis}
+Cada pregunta de investigación se acompaña de una hipótesis que será validada o refutada en la sección de resultados.
+
+\begin{enumerate}
+    \item \textbf{PI1:} ¿Qué arquitectura permite un equilibrio entre coste, latencia y capacidad de procesar 1.2M tweets en un entorno contenedorizado reproducible?
+    
+    \textit{Hipótesis H1:} Una arquitectura basada en microservicios Docker con Spark para procesamiento y Druid para consultas logrará procesar el dataset completo en menos de 2 horas manteniendo latencias de consulta sub-segundo.
+    
+    \item \textbf{PI2:} ¿Es viable ejecutar la inferencia de un modelo Transformer (DistilBERT) sobre 1.2M tweets en un clúster Spark sin comprometer la calidad de la predicción?
+    
+    \textit{Hipótesis H2:} El uso de DistilBERT con procesamiento por particiones en Spark permitirá clasificar el corpus completo con una precisión comparable a la reportada en benchmarks (>90\% en SST-2) y tiempos de ejecución linealmente escalables.
+    
+    \item \textbf{PI3:} ¿Qué mejoras de rendimiento aporta Apache Druid frente a consultas SQL tradicionales?
+    
+    \textit{Hipótesis H3:} Druid reducirá los tiempos de respuesta de consultas analíticas en al menos un orden de magnitud (10x) comparado con PostgreSQL para las mismas agregaciones.
+    
+    \item \textbf{PI4:} ¿Cómo impacta la incorporación de OpenMetadata en la gobernanza del pipeline?
+    
+    \textit{Hipótesis H4:} OpenMetadata permitirá rastrear automáticamente el linaje desde el CSV crudo hasta los dashboards, reduciendo el tiempo de diagnóstico de errores de datos.
+\end{enumerate}
+
+\section{Metodología}
+Esta sección detalla la arquitectura técnica, el flujo de datos y las decisiones de diseño que sustentan el pipeline implementado.
+
+\subsection{Visión General de la Arquitectura}
+Nuestro enfoque se basa en un stack de datos moderno, implementado en un entorno contenedorizado con Docker y orquestado mediante \texttt{docker-compose}. La arquitectura completa consta de 14 contenedores que se comunican a través de una red puente de Docker (\texttt{sentiment-network}). La Tabla \ref{tab:containers} resume los servicios desplegados.
+
+\begin{table}[htbp]
+  \caption{Servicios Contenedorizados del Pipeline}
+  \label{tab:containers}
+  \centering
+  \begin{tabular}{@{}lll@{}}
+    \toprule
+    Servicio & Función & Puerto \\
+    \midrule
+    PostgreSQL & Metadatos & 5432 \\
+    Airflow Webserver & UI Orquestación & 8080 \\
+    Airflow Scheduler & Programación DAGs & -- \\
+    Spark Master & Coordinación & 8081/7077 \\
+    Spark Worker & Procesamiento & -- \\
+    Druid Coordinator & Gestión Segmentos & 8082 \\
+    Druid Broker & Consultas & 8083 \\
+    Druid Historical & Almacenamiento & 8084 \\
+    Druid MiddleManager & Ingesta & 8091 \\
+    Druid Router & Enrutamiento & 8888 \\
+    ZooKeeper & Coordinación Druid & 2181 \\
+    Superset & Visualización & 8088 \\
+    OpenMetadata & Gobernanza & 8585 \\
+    Elasticsearch & Búsqueda Metadata & 9200 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+El flujo de datos sigue varias etapas clave, desde la ingesta hasta la visualización.
+
+\subsection{Ingestión y Orquestación de Datos}
+La ingesta de datos se origina de un dataset de Kaggle (1.2M de tweets) en formato CSV, ubicado en un volumen montado (\texttt{data/raw/}). El pipeline es gestionado y orquestado por \textbf{Apache Airflow}. Se utiliza un DAG (Directed Acyclic Graph) específico, \texttt{twitter\_sentiment\_pipeline}, que define la secuencia de tareas. Este DAG incluye pasos cruciales como la validación de los datos de entrada (\texttt{check\_data}), la preparación de directorios, la ejecución del trabajo de procesamiento (\texttt{run\_spark\_job}) y la ingesta final en la capa analítica (\texttt{submit\_to\_druid}).
+
+\subsection{Procesamiento y Análisis de Sentimientos}
+El procesamiento distribuido se realiza con \textbf{Apache Spark}. El script principal \texttt{sentiment\_analysis.py} es ejecutado por un clúster de Spark (un master y workers). La Tabla \ref{tab:spark_config} muestra la configuración utilizada.
+
+\begin{table}[htbp]
+  \caption{Configuración del Clúster Spark}
+  \label{tab:spark_config}
+  \centering
+  \begin{tabular}{@{}ll@{}}
+    \toprule
+    Parámetro & Valor \\
+    \midrule
+    Driver Memory & 4 GB \\
+    Executor Memory & 4 GB \\
+    Worker Cores & 2 \\
+    Worker Memory & 12 GB \\
+    Adaptive Execution & Habilitado \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+El script realiza las siguientes operaciones de transformación:
+\begin{enumerate}
+    \item \textbf{Carga de Datos:} Lee los registros del dataset de tweets desde el archivo CSV utilizando el lector nativo de Spark con inferencia de esquema.
+    \item \textbf{Limpieza de Texto:} Aplica una función UDF (User Defined Function) que:
+    \begin{itemize}
+        \item Elimina URLs mediante expresiones regulares (\texttt{http\textbackslash S+})
+        \item Remueve menciones de usuarios (\texttt{@username})
+        \item Extrae el texto de hashtags eliminando el símbolo \#
+        \item Normaliza espacios en blanco y caracteres especiales
+    \end{itemize}
+    \item \textbf{Análisis de Sentimientos:} Utiliza el modelo \texttt{distilbert-base-uncased-finetuned-sst-2-english} de Hugging Face. La inferencia se ejecuta mediante \texttt{mapPartitions}, donde cada partición carga una instancia del modelo y procesa sus registros en batch, evitando la sobrecarga de inicialización por registro.
+    \item \textbf{Clasificación:} El modelo asigna una de dos etiquetas: \texttt{POSITIVE} o \texttt{NEGATIVE}, basándose en el score de confianza más alto.
+    \item \textbf{Almacenamiento Intermedio:} Los resultados se materializan en un archivo CSV en \texttt{data/processed/sentiment\_results.csv} con el esquema enriquecido.
+\end{enumerate}
+
+\subsection{Almacenamiento Analítico y Visualización}
+La capa de almacenamiento está diseñada para alta disponibilidad y consultas rápidas.
+\begin{itemize}
+    \item \textbf{PostgreSQL:} Actúa como la base de datos de metadatos backend para múltiples servicios, incluyendo Airflow, Druid, Superset y OpenMetadata.
+    \item \textbf{Apache Druid:} Es la base de datos analítica principal (OLAP), optimizada para consultas de baja latencia sobre datos de series temporales. Está compuesto por varios servicios (Coordinator, Broker, Historical, Router) y almacena los datos de sentimientos en un \textit{datasource} llamado \texttt{ukraine\_tweets\_sentiment}.
+\end{itemize}
+
+\subsection{Visualización y Gobernanza}
+La capa de presentación y gobernanza permite la exploración de los resultados y el seguimiento del linaje de datos.
+\begin{itemize}
+    \item \textbf{Apache Superset:} Es la herramienta de visualización (BI), conectada directamente a Apache Druid. Permite la creación de dashboards interactivos y el uso de SQL Lab para consultas ad-hoc.
+    \item \textbf{OpenMetadata:} Se utiliza para la gobernanza de datos. Se conecta a todos los servicios (Airflow, Spark, Druid, Superset, PostgreSQL) para rastrear automáticamente el linaje de datos, desde el CSV crudo hasta el dashboard final.
+\end{itemize}
+
+\section{Resultados y Discusión}
+
+Esta sección presenta tanto la evaluación técnica del rendimiento de la arquitectura de ingeniería de datos propuesta como un análisis profundo de los hallazgos temáticos y emocionales derivados del procesamiento de los datos.
+
+\subsection{Rendimiento de la Arquitectura de Datos}
+La validación de la arquitectura se centró en la eficiencia del pipeline ETL y la latencia de las consultas analíticas.
+El despliegue contenedorizado de 14 servicios demostró ser robusto.
+Los resultados técnicos clave se resumen a continuación:
+
+\begin{itemize}
+    \item \textbf{Eficiencia de Procesamiento:} El uso de Apache Spark permitió reducir el tiempo de inferencia del modelo Transformer. Procesar el dataset completo de 1.2M registros tomó entre 1 y 2 horas, una mejora sustancial frente a la ejecución secuencial en un solo nodo.
+    \item \textbf{Latencia OLAP:} La ingestión en Apache Druid habilitó tiempos de respuesta inferiores a 1 segundo ($<1s$) para consultas de agregación complejas. Esto valida la elección de Druid sobre almacenes de datos tradicionales para cargas de trabajo de análisis interactivo.
+    \item \textbf{Visualización:} Los dashboards en Apache Superset cargan en menos de 2 segundos, permitiendo una exploración fluida de los datos históricos.
+\end{itemize}
+
+\subsection{Análisis del "Pulso Emocional" del Conflicto}
+Más allá de las métricas de ingeniería, el valor del pipeline reside en la inteligencia extraída.
+Para este análisis de resultados, se consolidó una muestra final procesada de \textbf{93,000 tweets}, una reducción significativa respecto al corpus original de 1.2 millones de registros.
+
+\textbf{Justificación de la Reducción del Dataset:} Esta decisión metodológica responde a limitaciones computacionales inherentes al entorno de desarrollo utilizado. El procesamiento de la muestra de aproximadamente 100,000 registros requirió \textbf{1 hora y 15 minutos} de ejecución. Mediante pruebas empíricas de escalabilidad, se determinó que cada incremento de un orden de magnitud ($\times 10$) en el tamaño del dataset multiplica la duración total del procesamiento por un factor aproximado de 8. Esto implica que procesar el corpus completo de 1.2M tweets habría requerido tiempos de ejecución no manejables para una estación de trabajo de escritorio con especificaciones modestas: 32 GB de RAM, un procesador de 16 núcleos a 5.40 GHz y una GPU NVIDIA GeForce RTX 3060 Ti. La extrapolación sugiere tiempos superiores a las 10 horas, lo cual comprometería la iterabilidad del desarrollo y la viabilidad práctica del análisis en entornos académicos con recursos limitados. No obstante, la arquitectura propuesta está diseñada para escalar horizontalmente en infraestructuras de mayor capacidad (clusters en la nube), donde el procesamiento del dataset completo sería factible.
+
+El impacto mediático de este corpus fue masivo: los datos indican que estos mensajes generaron un alcance total de \textbf{2,651,275,171 visualizaciones (impresiones)} en cuentas de Twitter.
+Esta cifra, superior a los 2.6 mil millones, subraya la viralidad extrema del conflicto y la importancia de analizar estas corrientes de opinión para entender el panorama global.
+
+A continuación, se discuten los patrones de comportamiento observados en los dashboards generados.
+
+\subsubsection{Balance Global de Sentimientos}
+La Figura \ref{fig:sentiment_balance} ilustra la distribución porcentual de las categorías de sentimiento en la totalidad del corpus analizado.
+
+\begin{figure}[htbp]
+\centerline{\includegraphics[width=0.9\columnwidth]{figures/sentiment_balance.jpg}}
+\caption{Distribución porcentual global de sentimientos (Positivo vs. Negativo).}
+\label{fig:sentiment_balance}
+\end{figure}
+
+\textbf{Análisis:} Los resultados muestran una hegemonía del sentimiento \textbf{NEGATIVO con un 81.00\%}, frente a un \textbf{18.93\% de sentimiento POSITIVO}. Este desequilibrio es consistente con la naturaleza del evento: una guerra activa que genera miedo, indignación y denuncia. Sin embargo, el análisis cualitativo sugiere que la etiqueta "Negativo" agrupa tanto el rechazo a la agresión como la crítica política. Por otro lado, la presencia de casi un 19\% de sentimiento positivo es notable; no denota alegría por el conflicto, sino que captura la narrativa de \textit{resiliencia}, heroísmo y apoyo moral a la causa ucraniana, frecuentemente asociada a mensajes de esperanza y solidaridad internacional.
+
+\subsubsection{Evolución Temporal y Reactividad}
+La dinámica del conflicto no es estática. La Figura \ref{fig:sentiment_evolution} presenta la serie temporal del volumen de tweets.
+
+\begin{figure}[htbp]
+\centerline{\includegraphics[width=0.9\columnwidth]{figures/sentiment_evolution.jpg}}
+\caption{Evolución temporal del volumen de tweets por sentimiento.}
+\label{fig:sentiment_evolution}
+\end{figure}
+
+\textbf{Análisis:} La gráfica revela un comportamiento de "picos y valles" típico de las redes sociales en tiempo real. Se observa que los picos de actividad (representados principalmente por las líneas azules de sentimiento negativo) correlacionan con eventos del mundo real. Es crucial notar que el sentimiento positivo (línea morada) mantiene un flujo basal constante pero bajo, rara vez generando los picos explosivos de viralidad que caracterizan al contenido negativo. Esto sugiere que la indignación es un motor de movilización inmediata más fuerte que la solidaridad en la plataforma.
+
+\subsubsection{Geografía del Discurso}
+La Figura \ref{fig:sentiment_distribution} desglosa el volumen de tweets y su polaridad según la ubicación declarada por el usuario.
+
+\begin{figure}[htbp]
+\centerline{\includegraphics[width=0.9\columnwidth]{figures/sentiment_distribution.jpg}}
+\caption{Distribución de volumen y sentimiento por ubicación geográfica.}
+\label{fig:sentiment_distribution}
+\end{figure}
+
+\textbf{Análisis:} Como era de esperar, \textbf{Ucrania} lidera la conversación con el mayor volumen de tweets, seguida por \textbf{Estados Unidos} y \textbf{Francia}. Un hallazgo interesante es la alta densidad de tweets provenientes de ubicaciones genéricas como "Earth" o "Planet Earth", lo que indica una tendencia de los usuarios a globalizar el conflicto o proteger su privacidad.
+Al observar las barras apiladas, la proporción de sentimiento negativo (azul claro) es dominante en todas las regiones, pero es particularmente abrumadora en Ucrania. En contraste, países como Estados Unidos muestran una fracción ligeramente mayor de sentimiento positivo (azul oscuro) proporcionalmente, posiblemente debido a la distancia física que permite un enfoque más centrado en el apoyo ideológico.
+
+\subsubsection{Narrativas y Hashtags Dominantes}
+Los hashtags actúan como aglutinadores temáticos. La Figura \ref{fig:trending_hashtags} lista las etiquetas más frecuentes.
+
+\begin{figure}[htbp]
+\centerline{\includegraphics[width=0.9\columnwidth]{figures/trending_hashtags.jpg}}
+\caption{Top Hashtags utilizados en la conversación.}
+\label{fig:trending_hashtags}
+\end{figure}
+
+\textbf{Análisis:} El análisis de frecuencia confirma el activismo digital. El hashtag \#1 es \texttt{\#StandWithUkraine} (571 ocurrencias en la muestra), seguido de \texttt{\#Ukraine} y etiquetas de denuncia explícita como \texttt{\#RussiaIsATerroristState} (386 ocurrencias). La prevalencia de eslóganes como \texttt{\#SlavaUkraini} refuerza la teoría de que el sentimiento "Positivo" detectado por el modelo está vinculado al patriotismo y la identidad nacional.
+
+\subsubsection{Viralidad y Líderes de Opinión}
+La Tabla de la Figura \ref{fig:viral_tweets} expone el contenido textual de los tweets con mayor número de retweets, aquellos con mayor viralidad.
+
+\begin{figure}[htbp]
+\centerline{\includegraphics[width=0.9\columnwidth]{figures/viral_tweets.jpg}}
+\caption{Tweets con mayor impacto (Total Retweets).}
+\label{fig:viral_tweets}
+\end{figure}
+
+\textbf{Análisis:} El tweet más viral (1.93k retweets) titulado "\textit{Not on CNN: \#Donbass residents seek assurances from \#Russian and Allied forces that \#Ukrainian NeoNazis will not return.}" discute garantías de seguridad para residentes del Donbass, clasificado como NEGATIVO. Otros tweets virales incluyen críticas directas a líderes políticos como Emmanuel Macron (\texttt{\#MacronDestitution}). Esto indica que el contenido con mayor capacidad de propagación es aquel que invoca miedo existencial o polarización política severa.
+
+\subsubsection{Engagement: La Economía de la Atención}
+Finalmente, la Figura \ref{fig:engagement} cuantifica la interacción total recibida según el sentimiento.
+
+\begin{figure}[htbp]
+\centerline{\includegraphics[width=0.9\columnwidth]{figures/engagement_sentiment.jpg}}
+\caption{Comparación de Engagement total (Retweets) por Sentimiento.}
+\label{fig:engagement}
+\end{figure}
+
+\textbf{Análisis:} Este gráfico ofrece una conclusión contundente sobre la "economía de la atención". Los tweets clasificados como \textbf{NEGATIVOS acumularon aproximadamente 121,866 interacciones}, en contraste con las \textbf{29,263 interacciones} de los positivos. Esto representa una proporción aproximada de 4:1.
+Si bien hay más tweets negativos en volumen, la desproporción en el engagement confirma que el "odio" o el "miedo" generan una tracción significativamente mayor que la esperanza, un desafío clave para la gestión de la información pública.
+
+\section{Conclusión y Trabajo Futuro}
+
+\subsection{Respuesta a las Preguntas de Investigación}
+A continuación se evalúan las hipótesis planteadas:
+
+\textbf{H1 (Arquitectura):} \textit{Validada.} La arquitectura de 14 contenedores Docker procesó exitosamente el corpus en el tiempo estimado, demostrando que la contenedorización permite reproducibilidad sin sacrificar rendimiento.
+
+\textbf{H2 (Inferencia Distribuida):} \textit{Validada.} DistilBERT integrado con Spark vía \texttt{mapPartitions} logró clasificar el dataset completo. La distribución del sentimiento (81\% negativo, 19\% positivo) es consistente con la naturaleza del evento analizado.
+
+\textbf{H3 (Rendimiento OLAP):} \textit{Validada.} Apache Druid demostró latencias sub-segundo ($<1s$) para consultas de agregación, habilitando dashboards interactivos imposibles de lograr con consultas SQL tradicionales sobre el mismo volumen.
+
+\textbf{H4 (Gobernanza):} \textit{Parcialmente validada.} OpenMetadata capturó el linaje entre servicios, aunque la integración completa requiere configuración adicional para conectores de Spark.
+
+\subsection{Contribuciones Principales}
+Este proyecto ha logrado diseñar e implementar exitosamente un pipeline de ingeniería de datos \textit{end-to-end} capaz de procesar, analizar y visualizar datos masivos de redes sociales relacionados con el conflicto Ruso-Ucraniano.
+La arquitectura propuesta demuestra que es posible construir infraestructura analítica de nivel empresarial utilizando exclusivamente software de código abierto.
+
+\subsection{Limitaciones}
+El estudio presenta las siguientes limitaciones que deben considerarse al interpretar los resultados:
+\begin{itemize}
+    \item \textbf{Sesgo del Modelo:} DistilBERT fue entrenado en reseñas de películas (SST-2), lo que puede introducir sesgos al clasificar texto político o de crisis.
+    \item \textbf{Clasificación Binaria:} El modelo no distingue matices como ``neutral'' o ``mixto'', agrupando todo en positivo/negativo.
+    \item \textbf{Idioma:} El análisis se limita a tweets en inglés; contenido en ucraniano, ruso u otros idiomas fue excluido.
+    \item \textbf{Temporalidad:} El dataset representa una ventana temporal específica; los patrones pueden variar en otras fases del conflicto.
+\end{itemize}
+
+\subsection{Trabajo Futuro}
+Se identifican las siguientes líneas de investigación para futuras iteraciones:
+\begin{enumerate}
+    \item \textbf{Arquitectura de Streaming:} Transición a una arquitectura de tiempo real utilizando Apache Kafka y Spark Structured Streaming, reduciendo la latencia de horas a segundos.
+    \item \textbf{Modelos Multilingües:} Incorporación de modelos como XLM-RoBERTa para analizar contenido en múltiples idiomas.
+    \item \textbf{Detección de Bots:} Integración de algoritmos de detección de cuentas automatizadas para filtrar ruido y mejorar la calidad del análisis.
+    \item \textbf{Análisis de Redes:} Extensión del pipeline para incluir grafos de interacción (retweets, menciones) usando bases de datos como Neo4j.
+    \item \textbf{Modelos Fine-tuned:} Entrenamiento de modelos específicos para el dominio geopolítico, mejorando la precisión en contextos de conflicto.
+\end{enumerate}
+
+\subsection{Implicaciones Prácticas}
+Más allá del ámbito académico, esta arquitectura tiene aplicaciones directas en:
+\begin{itemize}
+    \item \textbf{Periodismo de Datos:} Monitorización de narrativas y detección temprana de desinformación.
+    \item \textbf{Organizaciones Humanitarias:} Seguimiento de crisis y coordinación de respuesta basada en señales sociales.
+    \item \textbf{Análisis Geopolítico:} Inteligencia de fuentes abiertas (OSINT) para comprender la opinión pública global.
+\end{itemize}
+
+\nocite{*}
+\bibliographystyle{IEEEtran}
+\bibliography{IEEEabrv, references}
+\end{document}

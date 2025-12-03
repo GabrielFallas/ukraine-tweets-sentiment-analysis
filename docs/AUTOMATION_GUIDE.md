@@ -46,54 +46,31 @@ The Ukraine Tweets Sentiment Analysis pipeline is now **fully automated** from d
 
 ## 📊 Pipeline Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                     AIRFLOW ORCHESTRATION                       │
-│                         (12 Tasks)                              │
-└─────────────────────────────────────────────────────────────────┘
-                                │
-                    ┌───────────┴───────────┐
-                    │                       │
-            ┌───────▼───────┐       ┌──────▼──────┐
-            │  DATA CHECK   │       │   SETUP     │
-            │  & VALIDATION │       │  METADATA   │
-            └───────┬───────┘       └──────┬──────┘
-                    └───────────┬───────────┘
-                                │
-                    ┌───────────▼────────────┐
-                    │  SPARK PROCESSING      │
-                    │  (Sentiment Analysis)  │
-                    └───────────┬────────────┘
-                                │
-                    ┌───────────▼────────────┐
-                    │  OUTPUT VALIDATION     │
-                    └───────────┬────────────┘
-                                │
-                ┌───────────────┴────────────────┐
-                │                                │
-        ┌───────▼────────┐            ┌─────────▼────────┐
-        │   POSTGRESQL   │            │   DRUID SETUP    │
-        │   DATA LOAD    │            │   & INGESTION    │
-        └───────┬────────┘            └─────────┬────────┘
-                │                               │
-        ┌───────▼────────┐                     │
-        │  SUPERSET DB   │                     │
-        │  CONNECTION    │                     │
-        └───────┬────────┘                     │
-                │                               │
-        ┌───────▼────────┐                     │
-        │  DASHBOARD     │                     │
-        │  CREATION      │                     │
-        └───────┬────────┘                     │
-                └───────────────┬───────────────┘
-                                │
-                    ┌───────────▼────────────┐
-                    │  METADATA LOGGING      │
-                    └───────────┬────────────┘
-                                │
-                    ┌───────────▼────────────┐
-                    │  SUCCESS NOTIFICATION  │
-                    └────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph Airflow["AIRFLOW ORCHESTRATION (12 Tasks)"]
+        direction TB
+        A["1-2: Data Check & Validation"]
+        B["3: Create Metadata Table"]
+        C["4: SPARK PROCESSING<br/>(Sentiment Analysis)"]
+        D["5: OUTPUT VALIDATION"]
+
+        E["6: POSTGRESQL<br/>DATA LOAD"]
+        F["7-8: DRUID SETUP<br/>& INGESTION"]
+
+        G["9: SUPERSET DB<br/>CONNECTION"]
+        H["10: DASHBOARD<br/>CREATION"]
+        I["11: METADATA LOGGING"]
+        J["12: SUCCESS NOTIFICATION"]
+    end
+
+    A --> B --> C --> D
+    D --> E
+    D --> F
+    E --> G --> H
+    H --> I
+    F --> I
+    I --> J
 ```
 
 ---
@@ -426,4 +403,4 @@ The pipeline is now **100% automated**:
 -   [QUICKSTART.md](QUICKSTART.md) - Getting started guide
 -   [ARCHITECTURE.md](ARCHITECTURE.md) - System architecture
 -   [TROUBLESHOOTING.md](TROUBLESHOOTING.md) - Common issues
--   [SUPERSET_CONNECTION_GUIDE.md](SUPERSET_CONNECTION_GUIDE.md) - Superset details
+-   [SUPERSET.md](SUPERSET.md) - Superset details

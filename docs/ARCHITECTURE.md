@@ -2,69 +2,49 @@
 
 ## High-Level Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         Data Pipeline Architecture                   │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph Source["📥 Data Source"]
+        A[("Kaggle Dataset<br/>Ukraine Tweets")]
+    end
 
-                    ┌──────────────────┐
-                    │  Kaggle Dataset  │
-                    │ (Ukraine Tweets) │
-                    └────────┬─────────┘
-                             │
-                             ▼
-                    ┌──────────────────┐
-                    │   Data Storage   │
-                    │  data/raw/*.csv  │
-                    └────────┬─────────┘
-                             │
-                             ▼
-            ┌────────────────────────────────┐
-            │      Apache Airflow            │
-            │  (Workflow Orchestration)      │
-            │                                │
-            │  ┌──────────────────────────┐ │
-            │  │ twitter_sentiment_dag.py │ │
-            │  └──────────────────────────┘ │
-            └────────┬───────────────────────┘
-                     │
-                     ▼
-            ┌────────────────────────────────┐
-            │      Apache Spark              │
-            │  (Data Processing & ML)        │
-            │                                │
-            │  ┌──────────────────────────┐ │
-            │  │  sentiment_analysis.py   │ │
-            │  │  - Text Cleaning         │ │
-            │  │  - Sentiment Analysis    │ │
-            │  │  - HuggingFace Model     │ │
-            │  └──────────────────────────┘ │
-            └────────┬───────────────────────┘
-                     │
-                     ▼
-            ┌────────────────────────────────┐
-            │    Processed Results           │
-            │  data/processed/*.csv          │
-            └────────┬───────────────────────┘
-                     │
-          ┌──────────┴──────────┐
-          ▼                     ▼
-    ┌───────────┐        ┌──────────────┐
-    │PostgreSQL │        │ Apache Druid │
-    │ Metadata  │        │   (OLAP)     │
-    └─────┬─────┘        └──────┬───────┘
-          │                     │
-          │                     ▼
-          │              ┌──────────────┐
-          │              │   Superset   │
-          │              │(Visualization)│
-          │              └──────────────┘
-          │
-          ▼
-    ┌───────────────┐
-    │ OpenMetadata  │
-    │  (Governance) │
-    └───────────────┘
+    subgraph Storage["💾 Data Storage"]
+        B[("data/raw/*.csv")]
+    end
+
+    subgraph Orchestration["🔄 Apache Airflow"]
+        C["twitter_sentiment_dag.py"]
+    end
+
+    subgraph Processing["⚡ Apache Spark"]
+        D["sentiment_analysis.py<br/>• Text Cleaning<br/>• Sentiment Analysis<br/>• HuggingFace Model"]
+    end
+
+    subgraph Output["📁 Processed Results"]
+        E[("data/processed/*.csv")]
+    end
+
+    subgraph Analytics["📊 Analytics Layer"]
+        F[("PostgreSQL<br/>Metadata")]
+        G[("Apache Druid<br/>OLAP")]
+    end
+
+    subgraph Visualization["📈 Visualization"]
+        H["Apache Superset<br/>Dashboards"]
+    end
+
+    subgraph Governance["🔍 Governance"]
+        I["OpenMetadata<br/>Lineage & Quality"]
+    end
+
+    A --> B
+    B --> C
+    C --> D
+    D --> E
+    E --> F
+    E --> G
+    G --> H
+    F --> I
 ```
 
 ## Component Details
@@ -134,21 +114,41 @@
 
 All services communicate via Docker bridge network: `sentiment-network`
 
-```
-sentiment-network (172.18.0.0/16)
-├── postgres (172.18.0.2)
-├── airflow-webserver (172.18.0.3)
-├── airflow-scheduler (172.18.0.4)
-├── spark-master (172.18.0.5)
-├── spark-worker (172.18.0.6)
-├── druid-zookeeper (172.18.0.7)
-├── druid-coordinator (172.18.0.8)
-├── druid-broker (172.18.0.9)
-├── druid-historical (172.18.0.10)
-├── druid-router (172.18.0.11)
-├── superset (172.18.0.12)
-├── openmetadata (172.18.0.13)
-└── elasticsearch (172.18.0.14)
+```mermaid
+flowchart LR
+    subgraph Network["sentiment-network (172.18.0.0/16)"]
+        direction TB
+        subgraph Core["Core Services"]
+            PG[("postgres<br/>172.18.0.2")]
+        end
+
+        subgraph Airflow["Airflow"]
+            AW["airflow-webserver<br/>172.18.0.3"]
+            AS["airflow-scheduler<br/>172.18.0.4"]
+        end
+
+        subgraph Spark["Spark Cluster"]
+            SM["spark-master<br/>172.18.0.5"]
+            SW["spark-worker<br/>172.18.0.6"]
+        end
+
+        subgraph Druid["Druid Cluster"]
+            DZ["druid-zookeeper<br/>172.18.0.7"]
+            DC["druid-coordinator<br/>172.18.0.8"]
+            DB["druid-broker<br/>172.18.0.9"]
+            DH["druid-historical<br/>172.18.0.10"]
+            DR["druid-router<br/>172.18.0.11"]
+        end
+
+        subgraph Viz["Visualization"]
+            SS["superset<br/>172.18.0.12"]
+        end
+
+        subgraph Gov["Governance"]
+            OM["openmetadata<br/>172.18.0.13"]
+            ES["elasticsearch<br/>172.18.0.14"]
+        end
+    end
 ```
 
 ## Volume Mounts
